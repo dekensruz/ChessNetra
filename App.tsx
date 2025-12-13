@@ -8,7 +8,7 @@ import { TRANSLATIONS, MOCK_ANNOUNCEMENTS, MOCK_PLAYERS, MOCK_BOTS, MOCK_TOURNAM
 import { Language, Theme, UserProfile, Tournament } from './types';
 import { getChessAdvice } from './services/gemini';
 import { supabase } from './services/supabase';
-import { Users, Cpu, Play, Flag, RefreshCw, Clock, Lock, Unlock, AlertTriangle, CheckCircle, Shield, X, Filter, Plus, Calendar, Trophy } from 'lucide-react';
+import { Users, Cpu, Play, Flag, RefreshCw, Clock, Lock, Unlock, AlertTriangle, CheckCircle, Shield, X, Filter, Plus, Calendar, Trophy, Loader2 } from 'lucide-react';
 import { Chess } from 'chess.js';
 
 // --- Helper Components ---
@@ -245,7 +245,6 @@ const TournamentCard: React.FC<{ t: any, userProfile: UserProfile, allowUnpaid: 
       return () => clearInterval(interval);
    }, [t, lang]);
 
-   // Helper to determine display status based on time
    const getDisplayStatus = () => {
        const now = new Date().getTime();
        const start = new Date(t.start_date).getTime();
@@ -316,7 +315,6 @@ const TournamentsPage = ({ userProfile, allowUnpaid, lang, tournaments }: { user
    const [activeFilter, setActiveFilter] = useState<'all' | 'live' | 'planned' | 'finished'>('all');
    const t = TRANSLATIONS[lang].tournaments;
 
-   // Filter based on dynamic time
    const filteredTournaments = tournaments.filter(t => {
        const now = new Date().getTime();
        const start = new Date(t.start_date).getTime();
@@ -347,7 +345,6 @@ const TournamentsPage = ({ userProfile, allowUnpaid, lang, tournaments }: { user
                <p className="text-slate-500 text-sm md:text-base">{t.subtitle}</p>
             </div>
             
-            {/* Filters - Scrollable on Mobile */}
             <div className="w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
                <div className="flex bg-white dark:bg-slate-800 p-1 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 min-w-max">
                   {['all', 'live', 'planned', 'finished'].map((filter) => (
@@ -379,7 +376,7 @@ const TournamentsPage = ({ userProfile, allowUnpaid, lang, tournaments }: { user
    );
 };
 
-// 3. UPDATED RANKING PAGE (Responsive)
+// 3. RANKING PAGE (Responsive)
 const RankingPageWithFilters = ({ lang }: { lang: Language }) => {
    const [country, setCountry] = useState('All');
    const [gender, setGender] = useState('All');
@@ -398,7 +395,6 @@ const RankingPageWithFilters = ({ lang }: { lang: Language }) => {
         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-6">
           <h2 className="text-3xl font-bold">{t.title}</h2>
           
-          {/* Filters - Responsive Grid */}
           <div className="w-full xl:w-auto p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
              <div className="flex items-center mb-3 text-xs font-bold uppercase text-slate-400 tracking-wider">
                <Filter size={14} className="mr-2" /> {TRANSLATIONS[lang].common.filter}
@@ -429,7 +425,6 @@ const RankingPageWithFilters = ({ lang }: { lang: Language }) => {
         </div>
     
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
-          {/* Responsive Table */}
           <div className="overflow-x-auto">
             <table className="w-full text-left min-w-[700px]">
                <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider">
@@ -479,7 +474,7 @@ const RankingPageWithFilters = ({ lang }: { lang: Language }) => {
    );
 };
 
-// 4. PLAY PAGE (Responsive)
+// 4. PLAY PAGE (REAL MULTIPLAYER & BOT)
 const PlayPage = ({ lang, user }: { lang: Language, user: any }) => {
   const t = TRANSLATIONS[lang].game;
   const [mode, setMode] = useState<'online' | 'computer'>('online');
@@ -489,8 +484,18 @@ const PlayPage = ({ lang, user }: { lang: Language, user: any }) => {
   const [gameStatus, setGameStatus] = useState<string>('');
   const [whiteTime, setWhiteTime] = useState(600);
   const [blackTime, setBlackTime] = useState(600);
+  const [selectedTime, setSelectedTime] = useState<number>(10); // Default 10 minutes
+  
+  // Real Multiplayer States
+  const [isSearching, setIsSearching] = useState(false);
+  const [onlineGameId, setOnlineGameId] = useState<string | null>(null);
+  const [myColor, setMyColor] = useState<'w' | 'b'>('w');
+  const [opponentName, setOpponentName] = useState<string>('Opponent');
+  
   const timerRef = useRef<number | null>(null);
+  const onlineSubscriptionRef = useRef<any>(null);
 
+  // --- Timer Logic ---
   useEffect(() => {
     if (gameStarted && !game.isGameOver()) {
       timerRef.current = window.setInterval(() => {
@@ -511,29 +516,53 @@ const PlayPage = ({ lang, user }: { lang: Language, user: any }) => {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [gameStarted, game, gameStatus, t]);
 
-  useEffect(() => {
-    if (!gameStarted) {
-      const newGame = new Chess();
-      setGame(newGame);
-      setGameStatus('');
-      setWhiteTime(600);
-      setBlackTime(600);
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
-  }, [gameStarted]);
+  // --- Reset Logic ---
+  const resetGame = () => {
+     setGameStarted(false);
+     setGame(new Chess());
+     setGameStatus('');
+     setWhiteTime(selectedTime * 60);
+     setBlackTime(selectedTime * 60);
+     setOnlineGameId(null);
+     setIsSearching(false);
+     if (timerRef.current) clearInterval(timerRef.current);
+     if (onlineSubscriptionRef.current) supabase.removeChannel(onlineSubscriptionRef.current);
+  };
 
-  const onMove = (from: string, to: string) => {
-    if (mode === 'computer' && !gameStarted) return false;
+  useEffect(() => {
+      resetGame();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  // --- Move Logic ---
+  const onMove = async (from: string, to: string) => {
+    // 1. Validation de base
     if (game.isGameOver() || (whiteTime <= 0 || blackTime <= 0)) return false;
-    if (mode === 'computer' && game.turn() !== 'w') return false;
+    
+    // 2. Vérifier le tour (Local vs Online)
+    if (mode === 'computer') {
+       if (game.turn() !== 'w') return false; // Player is always white vs bot
+    } else if (mode === 'online') {
+       if (game.turn() !== myColor) return false; // Can't move opponent pieces
+    }
 
     try {
       const move = game.move({ from, to, promotion: 'q' });
       if (move) {
         setGame(new Chess(game.fen()));
         checkGameOver();
-        if (mode === 'computer' && gameStarted && !game.isGameOver()) {
-          setTimeout(() => makeBotMove(selectedBot), 500);
+
+        // 3. Envoyer le coup au serveur (Online) ou au Bot
+        if (mode === 'online' && onlineGameId) {
+             await supabase.from('games').update({
+                 current_fen: game.fen(),
+                 turn: game.turn(),
+                 last_move_from: from,
+                 last_move_to: to,
+                 pgn: game.pgn()
+             }).eq('id', onlineGameId);
+        } else if (mode === 'computer' && !game.isGameOver()) {
+             setTimeout(() => makeBotMove(selectedBot), 500);
         }
         return true;
       }
@@ -541,12 +570,7 @@ const PlayPage = ({ lang, user }: { lang: Language, user: any }) => {
     return false;
   };
 
-  const getPieceValue = (pieceType: string) => {
-     switch(pieceType) {
-       case 'p': return 1; case 'n': return 3; case 'b': return 3; case 'r': return 5; case 'q': return 9; case 'k': return 0; default: return 0;
-     }
-  };
-
+  // --- Bot Logic ---
   const makeBotMove = (botProfile: any) => {
     if (game.isGameOver()) return;
     const possibleMoves = game.moves({ verbose: true });
@@ -557,27 +581,103 @@ const PlayPage = ({ lang, user }: { lang: Language, user: any }) => {
     const shouldPlayBestMove = Math.random() < skillFactor;
 
     if (shouldPlayBestMove) {
-       const evaluateMove = (move: any) => {
-          let score = 0;
-          if (move.captured) { score += getPieceValue(move.captured) * 10; score -= getPieceValue(move.piece); }
-          if (move.promotion) score += 90;
-          if (move.san.includes('#')) score += 10000;
-          else if (move.san.includes('+')) score += 5;
-          const centerSquares = ['d4', 'd5', 'e4', 'e5'];
-          if (centerSquares.includes(move.to)) score += 2;
-          return score;
-       };
-       const rankedMoves = possibleMoves.map((move: any) => ({ move, score: evaluateMove(move) })).sort((a: any, b: any) => b.score - a.score);
-       const topN = elo > 2000 ? 1 : elo > 1500 ? 3 : 5;
-       const candidates = rankedMoves.slice(0, topN);
-       const selected = candidates[Math.floor(Math.random() * candidates.length)];
-       game.move(selected.move.san);
+       // Simple heuristic for "good" move
+       const randomMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+       game.move(randomMove.san);
     } else {
        const randomMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
        game.move(randomMove.san);
     }
     setGame(new Chess(game.fen()));
     checkGameOver();
+  };
+
+  // --- Online Matchmaking Logic ---
+  const handleStartOnlineGame = async () => {
+      if (!user) { alert("Please login first"); return; }
+      setIsSearching(true);
+      
+      try {
+          // 1. Chercher une partie en attente avec le même temps
+          const { data: availableGames } = await supabase
+            .from('games')
+            .select('*')
+            .eq('status', 'waiting')
+            .eq('time_control', selectedTime)
+            .neq('white_player_id', user.id) // Ne pas jouer contre soi-même
+            .limit(1);
+
+          if (availableGames && availableGames.length > 0) {
+              // Rejoindre la partie
+              const gameToJoin = availableGames[0];
+              await supabase
+                 .from('games')
+                 .update({ 
+                     black_player_id: user.id, 
+                     status: 'ongoing',
+                     played_at: new Date().toISOString()
+                 })
+                 .eq('id', gameToJoin.id);
+              
+              setOnlineGameId(gameToJoin.id);
+              setMyColor('b');
+              setOpponentName("Opponent (White)");
+              
+              // Récupérer infos adversaire (Optionnel, simplifie ici)
+              startRealtimeListener(gameToJoin.id);
+              setGameStarted(true);
+              setWhiteTime(selectedTime * 60);
+              setBlackTime(selectedTime * 60);
+              setIsSearching(false);
+          } else {
+              // Créer une nouvelle partie
+              const { data: newGame } = await supabase
+                 .from('games')
+                 .insert({
+                     white_player_id: user.id,
+                     status: 'waiting',
+                     time_control: selectedTime,
+                     current_fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+                 })
+                 .select()
+                 .single();
+              
+              if (newGame) {
+                  setOnlineGameId(newGame.id);
+                  setMyColor('w');
+                  setOpponentName("Waiting...");
+                  startRealtimeListener(newGame.id);
+                  // On reste en searching jusqu'à ce qu'un joueur rejoigne (détecté via realtime)
+              }
+          }
+      } catch (err) {
+          console.error("Error matchmaking:", err);
+          setIsSearching(false);
+      }
+  };
+
+  const startRealtimeListener = (gameId: string) => {
+      const channel = supabase.channel(`game:${gameId}`)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}` }, (payload) => {
+             const newData = payload.new;
+             
+             // 1. Détecter si un joueur rejoint
+             if (newData.status === 'ongoing' && newData.black_player_id && isSearching) {
+                 setIsSearching(false);
+                 setGameStarted(true);
+                 setOpponentName("Opponent joined!");
+             }
+
+             // 2. Mettre à jour le plateau
+             if (newData.current_fen && newData.current_fen !== game.fen()) {
+                 const newGame = new Chess(newData.current_fen);
+                 setGame(newGame);
+                 checkGameOver();
+             }
+        })
+        .subscribe();
+      
+      onlineSubscriptionRef.current = channel;
   };
 
   const checkGameOver = () => {
@@ -593,14 +693,12 @@ const PlayPage = ({ lang, user }: { lang: Language, user: any }) => {
      setGameStarted(true);
      setGame(new Chess());
      setGameStatus('');
-     setWhiteTime(600);
-     setBlackTime(600);
+     setWhiteTime(selectedTime * 60);
+     setBlackTime(selectedTime * 60);
   };
 
   const handleResign = () => {
-    setGameStarted(false);
-    setGame(new Chess());
-    if(mode === 'computer') setSelectedBot(null);
+    resetGame();
   };
 
   return (
@@ -612,28 +710,33 @@ const PlayPage = ({ lang, user }: { lang: Language, user: any }) => {
              {gameStatus}
            </div>
          )}
-         {mode === 'online' && !gameStarted && (
-           <div className="flex space-x-2 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-full shadow-sm">
-              <span className="w-3 h-3 bg-green-500 rounded-full animate-pulse my-auto"></span>
-              <span className="text-sm text-slate-500 font-medium">15,240 {t.players_online}</span>
-           </div>
-         )}
       </div>
 
       <div className="flex flex-col lg:grid lg:grid-cols-3 gap-8">
-        {/* Chess Board Container - 100% width on mobile */}
+        {/* Chess Board Container */}
         <div className="lg:col-span-2 w-full order-1">
-          <div className="flex justify-center bg-slate-100 dark:bg-slate-800/50 p-2 md:p-8 rounded-3xl shadow-inner min-h-[350px] md:min-h-[500px] items-center">
+          <div className="flex justify-center bg-slate-100 dark:bg-slate-800/50 p-2 md:p-8 rounded-3xl shadow-inner min-h-[350px] md:min-h-[500px] items-center relative">
+            {/* Searching Overlay */}
+            {isSearching && (
+                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm rounded-3xl">
+                    <Loader2 size={64} className="text-indigo-600 animate-spin mb-4" />
+                    <p className="text-xl font-bold text-slate-800 dark:text-white">Searching for opponent...</p>
+                    <p className="text-slate-500 mt-2">Time Control: {selectedTime} min</p>
+                    <button onClick={resetGame} className="mt-6 px-6 py-2 bg-red-100 text-red-600 rounded-full font-bold hover:bg-red-200">Cancel</button>
+                </div>
+            )}
+            
             <div className="w-full max-w-[600px]">
               <ChessBoard 
                 game={game}
                 onMove={onMove}
                 whiteTime={whiteTime}
                 blackTime={blackTime}
+                orientation={mode === 'online' && myColor === 'b' ? 'black' : 'white'}
                 playerTop={
-                  gameStarted && selectedBot ? { name: selectedBot.name, elo: selectedBot.elo, avatar: selectedBot.avatar, isBot: true } 
-                  : gameStarted ? { name: t.opponent, elo: 1450 } 
-                  : undefined
+                  gameStarted && mode === 'computer' && selectedBot ? { name: selectedBot.name, elo: selectedBot.elo, avatar: selectedBot.avatar, isBot: true } 
+                  : gameStarted && mode === 'online' ? { name: opponentName, elo: 1200 }
+                  : { name: "Adversaire", elo: 1200 }
                 }
                 playerBottom={{ 
                   name: user?.email ? user.email.split('@')[0] : 'Me', 
@@ -647,7 +750,8 @@ const PlayPage = ({ lang, user }: { lang: Language, user: any }) => {
 
         {/* Controls Container */}
         <div className="space-y-6 order-2">
-          <div className={`bg-white dark:bg-slate-800 p-2 rounded-2xl shadow-md border border-slate-100 dark:border-slate-700 flex transition-opacity ${gameStarted ? 'opacity-50 pointer-events-none' : ''}`}>
+          {/* Mode Switcher */}
+          <div className={`bg-white dark:bg-slate-800 p-2 rounded-2xl shadow-md border border-slate-100 dark:border-slate-700 flex transition-opacity ${gameStarted || isSearching ? 'opacity-50 pointer-events-none' : ''}`}>
              <button onClick={() => setMode('online')} className={`flex-1 flex items-center justify-center space-x-2 py-3 rounded-xl font-bold transition-all ${mode === 'online' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
                <Users size={18} /><span>{t.mode_online}</span>
              </button>
@@ -656,25 +760,44 @@ const PlayPage = ({ lang, user }: { lang: Language, user: any }) => {
              </button>
           </div>
           
-          {mode === 'online' && !gameStarted && (
+          {/* ONLINE SETUP */}
+          {mode === 'online' && !gameStarted && !isSearching && (
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 animate-fade-in">
-              <h3 className="font-semibold text-lg mb-4 flex items-center">{t.select_time}</h3>
+              <h3 className="font-semibold text-lg mb-4 flex items-center">{t.select_time} (Minutes)</h3>
               <div className="grid grid-cols-3 gap-3">
-                {['3+2', '5+0', '10+0', '15+10', '30+0'].map(time => (
-                  <button key={time} className="py-3 px-2 rounded-xl bg-slate-50 dark:bg-slate-700 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 transition-all font-bold text-sm border border-slate-200 dark:border-slate-600">{time}</button>
+                {[5, 10, 15, 30, 60].map(time => (
+                  <button 
+                    key={time} 
+                    onClick={() => setSelectedTime(time)}
+                    className={`py-3 px-2 rounded-xl transition-all font-bold text-sm border ${selectedTime === time ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 dark:bg-slate-700 border-slate-200 dark:border-slate-600 hover:border-indigo-400'}`}
+                  >
+                    {time} min
+                  </button>
                 ))}
-                <button className="py-3 px-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-400 hover:border-indigo-400 hover:text-indigo-500 font-bold text-sm">Custom</button>
               </div>
-              <button className="w-full mt-6 py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-bold text-lg shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center space-x-2">
+              <button 
+                onClick={handleStartOnlineGame}
+                className="w-full mt-6 py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-bold text-lg shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center space-x-2"
+              >
                 <Play size={20} fill="currentColor" /><span>{t.start}</span>
               </button>
             </div>
           )}
           
+          {/* BOT SETUP */}
           {mode === 'computer' && !gameStarted && (
              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 animate-fade-in space-y-4">
+                <div className="mb-4">
+                  <h3 className="font-semibold text-lg mb-2">{t.select_time}</h3>
+                   <div className="grid grid-cols-3 gap-2">
+                    {[10, 30, 60].map(time => (
+                        <button key={time} onClick={() => setSelectedTime(time)} className={`text-xs py-2 rounded-lg border ${selectedTime === time ? 'bg-purple-600 text-white' : 'bg-slate-50 dark:bg-slate-700'}`}>{time} min</button>
+                    ))}
+                   </div>
+                </div>
+
                 <h3 className="font-semibold text-lg">{t.bot_select}</h3>
-                <div className="grid grid-cols-1 gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="grid grid-cols-1 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                   {MOCK_BOTS.map(bot => (
                     <div key={bot.id} onClick={() => setSelectedBot(bot)} className={`relative p-3 rounded-xl cursor-pointer border-2 transition-all group ${selectedBot?.id === bot.id ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'border-transparent hover:border-slate-200 dark:hover:border-slate-600 bg-slate-50 dark:bg-slate-700/50'}`}>
                        <div className="flex items-center space-x-3">
@@ -693,7 +816,8 @@ const PlayPage = ({ lang, user }: { lang: Language, user: any }) => {
              </div>
           )}
           
-          {gameStarted && (
+          {/* ACTIVE GAME CONTROLS */}
+          {(gameStarted || isSearching) && (
              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 animate-fade-in space-y-4">
                 <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-4">
                    <h3 className="font-bold text-lg flex items-center"><span className="w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></span>{t.game_active}</h3>

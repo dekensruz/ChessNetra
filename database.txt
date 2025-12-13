@@ -17,6 +17,7 @@ create table public.profiles (
   id uuid references auth.users not null primary key,
   username text unique not null,
   full_name text,
+  email text, -- Utile pour l'affichage
   elo_rapid integer default 1200,
   elo_blitz integer default 1200,
   avatar_url text,
@@ -34,22 +35,45 @@ create table public.profiles (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- TRIGGER AUTOMATIC PROFILE CREATION
+create or replace function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (id, username, full_name, email, role, elo_rapid, created_at)
+  values (
+    new.id, 
+    split_part(new.email, '@', 1),
+    split_part(new.email, '@', 1), 
+    new.email,
+    'member',
+    1200,
+    now()
+  );
+  return new;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
 -- 3. TOURNAMENTS
 create table public.tournaments (
   id uuid default uuid_generate_v4() primary key,
   name text not null,
   description text,
   start_date timestamp with time zone not null,
-  end_date timestamp with time zone, -- Ajout date de fin pour le minuteur
+  end_date timestamp with time zone,
   type text default 'swiss' check (type in ('swiss', 'arena', 'knockout')),
-  category text default 'open' check (category in ('open', 'validation')), -- Open ou Validation Admin
+  category text default 'open' check (category in ('open', 'validation')),
   status text default 'planned' check (status in ('planned', 'live', 'finished')),
   organizer_id uuid references public.profiles(id),
   winning_club_id uuid references public.clubs(id),
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- 4. TOURNAMENT REGISTRATIONS (Nouveau)
+-- 4. TOURNAMENT REGISTRATIONS
 create table public.tournament_registrations (
   id uuid default uuid_generate_v4() primary key,
   tournament_id uuid references public.tournaments(id) not null,
@@ -59,14 +83,13 @@ create table public.tournament_registrations (
   unique(tournament_id, player_id)
 );
 
--- 5. APP SETTINGS (Nouveau - Pour le bouton Super Admin)
+-- 5. APP SETTINGS
 create table public.app_settings (
   key text primary key,
   value boolean default false,
   updated_by uuid references public.profiles(id),
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
--- Initial value: insert into public.app_settings (key, value) values ('allow_unpaid_tournaments', false);
 
 -- 6. GAMES
 create table public.games (
@@ -74,9 +97,14 @@ create table public.games (
   white_player_id uuid references public.profiles(id),
   black_player_id uuid references public.profiles(id),
   pgn text, -- Portable Game Notation
-  fen text, -- Current board state
-  result text check (result in ('white', 'black', 'draw', 'ongoing')),
-  time_control text not null, -- e.g., "10+5"
+  current_fen text default 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', -- État actuel
+  last_move_from text,
+  last_move_to text,
+  turn text default 'w', -- 'w' pour White, 'b' pour Black
+  result text check (result in ('white', 'black', 'draw', 'ongoing', 'waiting')),
+  status text default 'waiting' check (status in ('waiting', 'ongoing', 'finished')),
+  time_control integer not null, -- en minutes (ex: 10)
+  winner_id uuid references public.profiles(id),
   tournament_id uuid references public.tournaments(id),
   played_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -97,7 +125,7 @@ create table public.messages (
   id uuid default uuid_generate_v4() primary key,
   content text not null,
   sender_id uuid references public.profiles(id) not null,
-  room_id text default 'general', -- Can be a club ID or 'general'
+  room_id text default 'general',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -110,7 +138,12 @@ create policy "Public profiles are viewable by everyone" on profiles for select 
 create policy "Users can update own profile" on profiles for update using (auth.uid() = id);
 create policy "Read settings" on app_settings for select using (true);
 
--- Insert Dummy Data (International Context)
+-- Games Policies
+create policy "Anyone can read games" on games for select using (true);
+create policy "Auth users can create games" on games for insert with check (auth.uid() = white_player_id);
+create policy "Players can update their games" on games for update using (auth.uid() = white_player_id or auth.uid() = black_player_id);
+
+-- Insert Dummy Data (Clubs)
 insert into clubs (name, city, description) values 
 ('Royal Knights', 'London', 'Historical club with grandmaster traditions.'),
 ('Global Gambit', 'Online', 'The largest online chess community.'),
