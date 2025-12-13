@@ -1,6 +1,44 @@
 
 import { Language } from './types';
 
+export const COUNTRIES = [
+  { code: 'CD', name: 'Rép. Dém. du Congo', flag: '🇨🇩' },
+  { code: 'FR', name: 'France', flag: '🇫🇷' },
+  { code: 'US', name: 'United States', flag: '🇺🇸' },
+  { code: 'BE', name: 'Belgique', flag: '🇧🇪' },
+  { code: 'CA', name: 'Canada', flag: '🇨🇦' },
+  { code: 'CH', name: 'Suisse', flag: '🇨🇭' },
+  { code: 'BJ', name: 'Bénin', flag: '🇧🇯' },
+  { code: 'BF', name: 'Burkina Faso', flag: '🇧🇫' },
+  { code: 'BI', name: 'Burundi', flag: '🇧🇮' },
+  { code: 'CM', name: 'Cameroun', flag: '🇨🇲' },
+  { code: 'CG', name: 'Congo-Brazzaville', flag: '🇨🇬' },
+  { code: 'CI', name: 'Côte d\'Ivoire', flag: '🇨🇮' },
+  { code: 'GA', name: 'Gabon', flag: '🇬🇦' },
+  { code: 'GN', name: 'Guinée', flag: '🇬🇳' },
+  { code: 'HT', name: 'Haïti', flag: '🇭🇹' },
+  { code: 'MG', name: 'Madagascar', flag: '🇲🇬' },
+  { code: 'ML', name: 'Mali', flag: '🇲🇱' },
+  { code: 'MA', name: 'Maroc', flag: '🇲🇦' },
+  { code: 'MU', name: 'Maurice', flag: '🇲🇺' },
+  { code: 'NE', name: 'Niger', flag: '🇳🇪' },
+  { code: 'RW', name: 'Rwanda', flag: '🇷🇼' },
+  { code: 'SN', name: 'Sénégal', flag: '🇸🇳' },
+  { code: 'SC', name: 'Seychelles', flag: '🇸🇨' },
+  { code: 'TD', name: 'Tchad', flag: '🇹🇩' },
+  { code: 'TG', name: 'Togo', flag: '🇹🇬' },
+  { code: 'TN', name: 'Tunisie', flag: '🇹🇳' },
+  { code: 'CN', name: 'Chine', flag: '🇨🇳' },
+  { code: 'IN', name: 'Inde', flag: '🇮🇳' },
+  { code: 'RU', name: 'Russie', flag: '🇷🇺' },
+  { code: 'BR', name: 'Brésil', flag: '🇧🇷' },
+  { code: 'DE', name: 'Allemagne', flag: '🇩🇪' },
+  { code: 'IT', name: 'Italie', flag: '🇮🇹' },
+  { code: 'ES', name: 'Espagne', flag: '🇪🇸' },
+  { code: 'GB', name: 'Royaume-Uni', flag: '🇬🇧' },
+  { code: 'NO', name: 'Norvège', flag: '🇳🇴' }
+];
+
 export const TRANSLATIONS = {
   fr: {
     nav: {
@@ -103,6 +141,8 @@ export const TRANSLATIONS = {
       email_label: "Adresse Email",
       password_label: "Mot de passe",
       confirm_password_label: "Confirmer le mot de passe",
+      fullname_label: "Nom complet",
+      country_label: "Pays",
       password_mismatch: "Les mots de passe ne correspondent pas.",
       submit_login: "Se connecter",
       submit_register: "S'inscrire",
@@ -270,6 +310,8 @@ export const TRANSLATIONS = {
       email_label: "Email Address",
       password_label: "Password",
       confirm_password_label: "Confirm Password",
+      fullname_label: "Full Name",
+      country_label: "Country",
       password_mismatch: "Passwords do not match.",
       submit_login: "Sign In",
       submit_register: "Sign Up",

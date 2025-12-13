@@ -24,7 +24,7 @@ interface AdminDashboardProps {
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ userProfile, allowUnpaid, setAllowUnpaid, tournaments, setTournaments, lang }) => {
-  const isSuper = userProfile.role === 'superadmin';
+  const isSuper = userProfile?.role === 'superadmin';
   const [activeTab, setActiveTab] = useState<'users' | 'tournaments' | 'settings'>('users');
   const t = TRANSLATIONS[lang].admin;
 
@@ -209,7 +209,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ userProfile, allowUnpai
 };
 
 // 2. TOURNAMENTS PAGE (No Simulation)
-const TournamentCard: React.FC<{ t: any, userProfile: UserProfile, allowUnpaid: boolean, lang: Language }> = ({ t, userProfile, allowUnpaid, lang }) => {
+const TournamentCard: React.FC<{ t: any, userProfile: UserProfile | null, allowUnpaid: boolean, lang: Language }> = ({ t, userProfile, allowUnpaid, lang }) => {
    const [timeLeft, setTimeLeft] = useState('');
    const trans = TRANSLATIONS[lang].tournaments;
    const common = TRANSLATIONS[lang].common;
@@ -256,7 +256,7 @@ const TournamentCard: React.FC<{ t: any, userProfile: UserProfile, allowUnpaid: 
    };
 
    const displayStatus = getDisplayStatus();
-   const canRegister = (userProfile.is_paid_member || allowUnpaid || userProfile.role === 'admin' || userProfile.role === 'superadmin') && displayStatus === 'planned';
+   const canRegister = userProfile && (userProfile.is_paid_member || allowUnpaid || userProfile.role === 'admin' || userProfile.role === 'superadmin') && displayStatus === 'planned';
 
    return (
       <div className={`relative p-6 rounded-2xl border-2 transition-all hover:scale-[1.01] flex flex-col justify-between ${displayStatus === 'live' ? 'bg-gradient-to-br from-indigo-900 to-slate-900 text-white border-indigo-500 shadow-xl shadow-indigo-500/20' : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 shadow-lg'}`}>
@@ -311,7 +311,7 @@ const TournamentCard: React.FC<{ t: any, userProfile: UserProfile, allowUnpaid: 
    );
 };
 
-const TournamentsPage = ({ userProfile, allowUnpaid, lang, tournaments }: { userProfile: UserProfile, allowUnpaid: boolean, lang: Language, tournaments: Tournament[] }) => {
+const TournamentsPage = ({ userProfile, allowUnpaid, lang, tournaments }: { userProfile: UserProfile | null, allowUnpaid: boolean, lang: Language, tournaments: Tournament[] }) => {
    const [activeFilter, setActiveFilter] = useState<'all' | 'live' | 'planned' | 'finished'>('all');
    const t = TRANSLATIONS[lang].tournaments;
 
@@ -475,7 +475,7 @@ const RankingPageWithFilters = ({ lang }: { lang: Language }) => {
 };
 
 // 4. PLAY PAGE (REAL MULTIPLAYER & BOT)
-const PlayPage = ({ lang, user }: { lang: Language, user: any }) => {
+const PlayPage = ({ lang, user, userProfile }: { lang: Language, user: any, userProfile: UserProfile | null }) => {
   const t = TRANSLATIONS[lang].game;
   const [mode, setMode] = useState<'online' | 'computer'>('online');
   const [selectedBot, setSelectedBot] = useState<any>(null);
@@ -535,7 +535,7 @@ const PlayPage = ({ lang, user }: { lang: Language, user: any }) => {
   }, [mode]);
 
   // --- Move Logic ---
-  const onMove = async (from: string, to: string) => {
+  const onMove = (from: string, to: string) => {
     // 1. Validation de base
     if (game.isGameOver() || (whiteTime <= 0 || blackTime <= 0)) return false;
     
@@ -554,13 +554,15 @@ const PlayPage = ({ lang, user }: { lang: Language, user: any }) => {
 
         // 3. Envoyer le coup au serveur (Online) ou au Bot
         if (mode === 'online' && onlineGameId) {
-             await supabase.from('games').update({
+             supabase.from('games').update({
                  current_fen: game.fen(),
                  turn: game.turn(),
                  last_move_from: from,
                  last_move_to: to,
                  pgn: game.pgn()
-             }).eq('id', onlineGameId);
+             }).eq('id', onlineGameId).then(({error}) => {
+                if (error) console.error("Error updating game:", error);
+             });
         } else if (mode === 'computer' && !game.isGameOver()) {
              setTimeout(() => makeBotMove(selectedBot), 500);
         }
@@ -739,9 +741,9 @@ const PlayPage = ({ lang, user }: { lang: Language, user: any }) => {
                   : { name: "Adversaire", elo: 1200 }
                 }
                 playerBottom={{ 
-                  name: user?.email ? user.email.split('@')[0] : 'Me', 
-                  elo: 1200, 
-                  avatar: user?.email ? user.email.charAt(0).toUpperCase() : 'ME'
+                  name: userProfile?.full_name || (user?.email ? user.email.split('@')[0] : 'Me'), 
+                  elo: userProfile?.elo_rapid || 1200, 
+                  avatar: userProfile?.full_name ? userProfile.full_name.charAt(0).toUpperCase() : (user?.email ? user.email.charAt(0).toUpperCase() : 'ME')
                 }}
               />
             </div>
@@ -910,6 +912,7 @@ const App = () => {
   const [lang, setLang] = useState<Language>('fr');
   const [theme, setTheme] = useState<Theme>('light');
   const [user, setUser] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   
   // Super Admin Global State Mock
@@ -918,34 +921,51 @@ const App = () => {
   // State for tournaments (Moved up from constants/TournamentsPage)
   const [tournaments, setTournaments] = useState<Tournament[]>(MOCK_TOURNAMENTS);
 
-  // MOCK PROFILE FOR DEMO - In real app, fetch from Supabase 'profiles' table using user.id
-  // Change this role manually here to test: 'member' | 'admin' | 'superadmin'
-  const mockUserProfile: UserProfile = {
-     id: user?.id || '1',
-     username: 'Me',
-     role: 'superadmin', // SET THIS TO 'superadmin' TO SEE THE BUTTON
-     full_name: 'My Name',
-     elo_rapid: 1200,
-     is_paid_member: false, // Default unpaid to test the override
-     country: 'CD',
-     gender: 'M',
-     birth_year: 1995,
-     tournaments_won: 0
-  };
-
   useEffect(() => {
     const root = window.document.documentElement;
     if (theme === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
   }, [theme]);
 
+  // Fetch real profile from Supabase
+  const fetchProfile = async (userId: string) => {
+      try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single();
+            
+          if (data) {
+              setUserProfile(data);
+          } else {
+              console.log("No profile found (yet)");
+          }
+      } catch (err) {
+          console.error("Error fetching profile:", err);
+      }
+  };
+
   useEffect(() => {
+    // Initial Session Check
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      if (session?.user) setView('app');
+      if (session?.user) {
+          setView('app');
+          fetchProfile(session.user.id);
+      }
     });
+
+    // Auth Change Listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) { setView('app'); setIsAuthModalOpen(false); } else { setView('landing'); }
+      if (session?.user) { 
+          setView('app'); 
+          setIsAuthModalOpen(false);
+          fetchProfile(session.user.id);
+      } else { 
+          setView('landing'); 
+          setUserProfile(null);
+      }
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -961,13 +981,30 @@ const App = () => {
     );
   }
 
+  // Si on est connecté mais que le profil charge encore, on peut afficher un loader ou user par défaut
+  // Ici on passe 'userProfile' qui peut être null au début, les composants doivent gérer le null
+  const safeProfile: UserProfile = userProfile || {
+     id: user?.id || 'temp',
+     username: user?.email?.split('@')[0] || 'Guest',
+     full_name: user?.email?.split('@')[0] || 'Guest',
+     email: user?.email,
+     elo_rapid: 1200,
+     role: 'member',
+     is_paid_member: false,
+     country: 'CD',
+     gender: 'M',
+     birth_year: 2000,
+     tournaments_won: 0
+  };
+
   const renderPage = () => {
     switch(currentPage) {
-      case 'play': return <PlayPage lang={lang} user={user} />;
+      case 'play': return <PlayPage lang={lang} user={user} userProfile={safeProfile} />;
       case 'ranking': return <RankingPageWithFilters lang={lang} />;
       case 'training': return <TrainingPage lang={lang} />;
-      case 'tournaments': return <TournamentsPage userProfile={mockUserProfile} allowUnpaid={allowUnpaidTournaments} lang={lang} tournaments={tournaments} />;
-      case 'admin': return <AdminDashboard userProfile={mockUserProfile} allowUnpaid={allowUnpaidTournaments} setAllowUnpaid={setAllowUnpaidTournaments} lang={lang} tournaments={tournaments} setTournaments={setTournaments} />;
+      case 'tournaments': return <TournamentsPage userProfile={safeProfile} allowUnpaid={allowUnpaidTournaments} lang={lang} tournaments={tournaments} />;
+      // Only show admin dashboard if truly admin
+      case 'admin': return (safeProfile.role === 'admin' || safeProfile.role === 'superadmin') ? <AdminDashboard userProfile={safeProfile} allowUnpaid={allowUnpaidTournaments} setAllowUnpaid={setAllowUnpaidTournaments} lang={lang} tournaments={tournaments} setTournaments={setTournaments} /> : <div className="p-8 text-center text-red-500">Access Denied</div>;
       case 'news': return (
         <div className="space-y-6 animate-fade-in pb-20 lg:pb-0">
           <h2 className="text-3xl font-bold">{TRANSLATIONS[lang].nav.news}</h2>
@@ -995,7 +1032,7 @@ const App = () => {
   };
 
   return (
-    <Layout currentLang={lang} setLang={setLang} theme={theme} toggleTheme={toggleTheme} currentPage={currentPage} setPage={setCurrentPage} user={user} userProfile={mockUserProfile}>
+    <Layout currentLang={lang} setLang={setLang} theme={theme} toggleTheme={toggleTheme} currentPage={currentPage} setPage={setCurrentPage} user={user} userProfile={safeProfile}>
       {renderPage()}
     </Layout>
   );
