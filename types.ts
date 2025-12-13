@@ -1,11 +1,19 @@
+
 export interface UserProfile {
   id: string;
   username: string;
+  email?: string; // Added for UI convenience
   full_name: string;
   elo_rapid: number;
   club_id?: string;
+  club_name?: string; // Helper for UI
   avatar_url?: string;
   role: 'member' | 'admin' | 'superadmin';
+  country: string;
+  gender: 'M' | 'F' | 'Other';
+  birth_year: number;
+  tournaments_won: number;
+  is_paid_member: boolean;
 }
 
 export interface Club {
@@ -18,9 +26,13 @@ export interface Club {
 export interface Tournament {
   id: string;
   name: string;
-  date: string;
+  description: string;
+  start_date: string; // ISO String
+  end_date: string;   // ISO String
   status: 'planned' | 'live' | 'finished';
-  registered: number;
+  category: 'open' | 'validation';
+  registered_count: number;
+  max_players?: number;
 }
 
 export interface Announcement {

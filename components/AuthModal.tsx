@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { X, Mail, Lock, Loader } from 'lucide-react';
+import { X, Mail, Lock, Loader, Eye, EyeOff } from 'lucide-react';
 import { signIn, signUp } from '../services/supabase';
 import { TRANSLATIONS } from '../constants';
 import { Language } from '../types';
@@ -15,6 +15,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, lang }) =
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -28,6 +31,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, lang }) =
     setLoading(true);
     setError(null);
     setSuccessMsg(null);
+
+    // Validation des mots de passe lors de l'inscription
+    if (!isLogin && password !== confirmPassword) {
+       setError(t.password_mismatch);
+       setLoading(false);
+       return;
+    }
 
     try {
       if (isLogin) {
@@ -46,6 +56,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, lang }) =
     } finally {
       setLoading(false);
     }
+  };
+
+  const resetForm = () => {
+      setIsLogin(!isLogin); 
+      setError(null); 
+      setSuccessMsg(null);
+      setPassword('');
+      setConfirmPassword('');
   };
 
   return (
@@ -114,15 +132,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, lang }) =
                   <Lock size={18} className="text-slate-400" />
                 </div>
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                  className="w-full pl-10 pr-12 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
                   placeholder="••••••••"
                 />
+                <button 
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-indigo-500 transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
+
+            {!isLogin && (
+                <div className="space-y-1 animate-fade-in">
+                  <label className="text-sm font-semibold text-slate-600 dark:text-slate-400 ml-1">{t.confirm_password_label}</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Lock size={18} className="text-slate-400" />
+                    </div>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full pl-10 pr-12 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                      placeholder="••••••••"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-indigo-500 transition-colors"
+                    >
+                      {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+            )}
 
             <button
               type="submit"
@@ -135,7 +186,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, lang }) =
 
           <div className="mt-6 text-center">
             <button
-              onClick={() => { setIsLogin(!isLogin); setError(null); setSuccessMsg(null); }}
+              onClick={resetForm}
               className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
             >
               {isLogin ? t.switch_to_register : t.switch_to_login}
