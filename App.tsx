@@ -547,21 +547,33 @@ const PlayPage = ({ lang, user, userProfile }: { lang: Language, user: any, user
     }
 
     try {
+      // 3. Appliquer le coup localement (Optimistic Update)
       const move = game.move({ from, to, promotion: 'q' });
+      
       if (move) {
-        setGame(new Chess(game.fen()));
+        const newFen = game.fen();
+        const newPgn = game.pgn();
+        const newTurn = game.turn();
+        
+        // Force update react state
+        setGame(new Chess(newFen));
         checkGameOver();
 
-        // 3. Envoyer le coup au serveur (Online) ou au Bot
+        // 4. Envoyer le coup au serveur (Online) ou au Bot
         if (mode === 'online' && onlineGameId) {
+             // On envoie le FEN et le tour au serveur
              supabase.from('games').update({
-                 current_fen: game.fen(),
-                 turn: game.turn(),
+                 current_fen: newFen,
+                 turn: newTurn,
                  last_move_from: from,
                  last_move_to: to,
-                 pgn: game.pgn()
+                 pgn: newPgn
              }).eq('id', onlineGameId).then(({error}) => {
-                if (error) console.error("Error updating game:", error);
+                if (error) {
+                    console.error("Error syncing move:", error);
+                    // En cas d'erreur, on pourrait annuler le coup (rollback), 
+                    // mais pour l'instant on laisse l'optimistic update.
+                }
              });
         } else if (mode === 'computer' && !game.isGameOver()) {
              setTimeout(() => makeBotMove(selectedBot), 500);
@@ -583,7 +595,6 @@ const PlayPage = ({ lang, user, userProfile }: { lang: Language, user: any, user
     const shouldPlayBestMove = Math.random() < skillFactor;
 
     if (shouldPlayBestMove) {
-       // Simple heuristic for "good" move
        const randomMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
        game.move(randomMove.san);
     } else {
@@ -600,7 +611,7 @@ const PlayPage = ({ lang, user, userProfile }: { lang: Language, user: any, user
       setIsSearching(true);
       
       try {
-          // 1. Chercher une partie en attente avec le même temps
+          // 1. Chercher une partie en attente (Aléatoire)
           const { data: availableGames } = await supabase
             .from('games')
             .select('*')
@@ -610,9 +621,10 @@ const PlayPage = ({ lang, user, userProfile }: { lang: Language, user: any, user
             .limit(1);
 
           if (availableGames && availableGames.length > 0) {
-              // Rejoindre la partie
+              // --- REJOINDRE UNE PARTIE ---
               const gameToJoin = availableGames[0];
-              await supabase
+              
+              const { error } = await supabase
                  .from('games')
                  .update({ 
                      black_player_id: user.id, 
@@ -620,20 +632,21 @@ const PlayPage = ({ lang, user, userProfile }: { lang: Language, user: any, user
                      played_at: new Date().toISOString()
                  })
                  .eq('id', gameToJoin.id);
+
+              if (error) throw error;
               
               setOnlineGameId(gameToJoin.id);
               setMyColor('b');
               setOpponentName("Opponent (White)");
               
-              // Récupérer infos adversaire (Optionnel, simplifie ici)
               startRealtimeListener(gameToJoin.id);
               setGameStarted(true);
               setWhiteTime(selectedTime * 60);
               setBlackTime(selectedTime * 60);
               setIsSearching(false);
           } else {
-              // Créer une nouvelle partie
-              const { data: newGame } = await supabase
+              // --- CRÉER UNE NOUVELLE PARTIE ---
+              const { data: newGame, error } = await supabase
                  .from('games')
                  .insert({
                      white_player_id: user.id,
@@ -644,36 +657,47 @@ const PlayPage = ({ lang, user, userProfile }: { lang: Language, user: any, user
                  .select()
                  .single();
               
+              if (error) throw error;
+
               if (newGame) {
                   setOnlineGameId(newGame.id);
                   setMyColor('w');
-                  setOpponentName("Waiting...");
+                  setOpponentName("Waiting for opponent...");
                   startRealtimeListener(newGame.id);
-                  // On reste en searching jusqu'à ce qu'un joueur rejoigne (détecté via realtime)
+                  // On reste en searching jusqu'à ce qu'un joueur rejoigne
               }
           }
       } catch (err) {
           console.error("Error matchmaking:", err);
           setIsSearching(false);
+          alert("Erreur lors de la recherche de partie. Vérifiez votre connexion.");
       }
   };
 
   const startRealtimeListener = (gameId: string) => {
+      // Nettoyer l'ancien channel s'il existe
+      if (onlineSubscriptionRef.current) supabase.removeChannel(onlineSubscriptionRef.current);
+
       const channel = supabase.channel(`game:${gameId}`)
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}` }, (payload) => {
              const newData = payload.new;
              
-             // 1. Détecter si un joueur rejoint
-             if (newData.status === 'ongoing' && newData.black_player_id && isSearching) {
+             // 1. Un adversaire a rejoint ?
+             if (newData.status === 'ongoing' && newData.black_player_id && !gameStarted) {
                  setIsSearching(false);
                  setGameStarted(true);
-                 setOpponentName("Opponent joined!");
+                 if (myColor === 'w') setOpponentName("Opponent Joined!");
              }
 
-             // 2. Mettre à jour le plateau
+             // 2. Un coup a été joué par l'adversaire ?
+             // On ne met à jour que si le FEN est différent de notre état actuel
              if (newData.current_fen && newData.current_fen !== game.fen()) {
                  const newGame = new Chess(newData.current_fen);
                  setGame(newGame);
+                 
+                 // Jouer un son (optionnel)
+                 // const audio = new Audio('/move-self.mp3'); audio.play();
+                 
                  checkGameOver();
              }
         })
@@ -722,7 +746,9 @@ const PlayPage = ({ lang, user, userProfile }: { lang: Language, user: any, user
             {isSearching && (
                 <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm rounded-3xl">
                     <Loader2 size={64} className="text-indigo-600 animate-spin mb-4" />
-                    <p className="text-xl font-bold text-slate-800 dark:text-white">Searching for opponent...</p>
+                    <p className="text-xl font-bold text-slate-800 dark:text-white">
+                        {myColor === 'w' ? "Waiting for opponent..." : "Joining game..."}
+                    </p>
                     <p className="text-slate-500 mt-2">Time Control: {selectedTime} min</p>
                     <button onClick={resetGame} className="mt-6 px-6 py-2 bg-red-100 text-red-600 rounded-full font-bold hover:bg-red-200">Cancel</button>
                 </div>
