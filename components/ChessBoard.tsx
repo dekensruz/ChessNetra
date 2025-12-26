@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, RotateCcw, Volume2, VolumeX, X, MoreVertical, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Chess } from 'chess.js';
 
 interface PlayerInfo {
@@ -14,8 +14,8 @@ interface ChessBoardProps {
   onMove: (from: string, to: string) => boolean;
   playerTop?: PlayerInfo;
   playerBottom?: PlayerInfo;
-  whiteTime: number; // en secondes
-  blackTime: number; // en secondes
+  whiteTime: number; 
+  blackTime: number; 
   onTimeOut: (winner: 'white' | 'black') => void;
   onExit: () => void;
 }
@@ -39,7 +39,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({ game, onMove, playerTop,
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [possibleMoves, setPossibleMoves] = useState<string[]>([]);
   
-  // États locaux du minuteur pour éviter les resets
   const [wTime, setWTime] = useState(whiteTime);
   const [bTime, setBTime] = useState(blackTime);
   const initialSyncRef = useRef(false);
@@ -48,7 +47,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({ game, onMove, playerTop,
   const [displayGame, setDisplayGame] = useState(new Chess(game.fen()));
   const timerRef = useRef<any>(null);
 
-  // Synchronisation UNIQUE lors de l'initialisation de la partie
   useEffect(() => {
     if (!initialSyncRef.current) {
       setWTime(whiteTime);
@@ -57,17 +55,21 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({ game, onMove, playerTop,
     }
   }, [whiteTime, blackTime]);
 
-  // Met à jour l'affichage si le jeu change (mais pas le minuteur)
   useEffect(() => {
     if (historyIndex === -1) {
       setDisplayGame(new Chess(game.fen()));
+    } else {
+      const history = game.history();
+      const temp = new Chess();
+      for (let i = 0; i <= historyIndex; i++) {
+        temp.move(history[i]);
+      }
+      setDisplayGame(temp);
     }
   }, [game, historyIndex]);
 
-  // Gestion de la boucle du minuteur
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
-    
     if (game.isGameOver()) return;
 
     timerRef.current = setInterval(() => {
@@ -76,7 +78,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({ game, onMove, playerTop,
         setWTime(prev => {
           if (prev <= 0) {
             clearInterval(timerRef.current);
-            onTimeOut('black'); // Les noirs gagnent
+            onTimeOut('black');
             return 0;
           }
           return prev - 1;
@@ -85,7 +87,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({ game, onMove, playerTop,
         setBTime(prev => {
           if (prev <= 0) {
             clearInterval(timerRef.current);
-            onTimeOut('white'); // Les blancs gagnent
+            onTimeOut('white');
             return 0;
           }
           return prev - 1;
@@ -99,7 +101,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({ game, onMove, playerTop,
   }, [game, onTimeOut]);
 
   const handleSquareClick = useCallback((square: string) => {
-    if (historyIndex !== -1) return;
+    if (historyIndex !== -1) {
+        setHistoryIndex(-1);
+        return;
+    }
     
     if (selectedSquare) {
       if (onMove(selectedSquare, square)) {
@@ -124,29 +129,49 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({ game, onMove, playerTop,
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const navigateHistory = (dir: 'back' | 'next') => {
+    const history = game.history();
+    if (history.length === 0) return;
+
+    if (dir === 'back') {
+      if (historyIndex === -1) {
+        setHistoryIndex(history.length - 1);
+      } else {
+        setHistoryIndex(Math.max(0, historyIndex - 1));
+      }
+    } else {
+      if (historyIndex === -1) return;
+      if (historyIndex === history.length - 1) {
+        setHistoryIndex(-1);
+      } else {
+        setHistoryIndex(historyIndex + 1);
+      }
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-slate-950 z-[200] flex flex-col items-center justify-center p-4 lg:p-10 animate-fade-in text-white overflow-hidden">
-      <div className="w-full max-w-[1200px] flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-16">
+    <div className="fixed inset-0 bg-slate-950 z-[200] flex flex-col items-center justify-center p-4 animate-fade-in text-white overflow-hidden">
+      <div className="w-full max-w-[1200px] flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-16">
         
-        {/* Adversaire (Haut) */}
-        <div className="w-full max-w-[550px] lg:max-w-[300px] flex flex-row lg:flex-col justify-between items-center lg:items-start gap-4 order-1">
+        {/* Top Player (Opponent) */}
+        <div className="w-full max-w-[500px] lg:max-w-[280px] flex flex-row lg:flex-col justify-between items-center lg:items-start gap-4 order-1">
           <div className="flex items-center space-x-3">
             <div className="w-12 h-12 lg:w-16 lg:h-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-xl lg:text-3xl">
-              {playerTop?.name?.charAt(0)}
+              {playerTop?.avatar || playerTop?.name?.charAt(0)}
             </div>
-            <div>
-              <p className="text-sm lg:text-xl font-black text-slate-200">{playerTop?.name}</p>
+            <div className="overflow-hidden">
+              <p className="text-sm lg:text-lg font-black text-slate-200 truncate">{playerTop?.name}</p>
               <p className="text-[10px] lg:text-xs font-black text-blue-500 uppercase tracking-widest">{playerTop?.elo} ELO</p>
             </div>
           </div>
-          <div className={`px-4 py-2 lg:px-6 lg:py-4 rounded-2xl font-mono text-2xl lg:text-5xl font-black min-w-[100px] lg:min-w-[180px] text-center shadow-2xl transition-colors ${bTime < 30 && bTime > 0 ? 'bg-red-500 animate-pulse' : 'bg-slate-800'}`}>
+          <div className={`px-4 py-2 lg:px-6 lg:py-4 rounded-2xl font-mono text-2xl lg:text-5xl font-black min-w-[100px] lg:min-w-[160px] text-center shadow-2xl transition-all duration-300 ${bTime < 30 && bTime > 0 ? 'bg-red-600 animate-pulse' : 'bg-slate-800'}`}>
             {formatTime(bTime)}
           </div>
         </div>
 
-        {/* Plateau Central */}
-        <div className="relative w-full aspect-square max-w-[550px] order-2">
-          <div className="w-full h-full grid grid-cols-8 grid-rows-8 border-[6px] lg:border-[12px] border-slate-800 shadow-3xl rounded-xl overflow-hidden bg-slate-900 relative">
+        {/* Board */}
+        <div className="relative w-full aspect-square max-w-[500px] order-2 group">
+          <div className="w-full h-full grid grid-cols-8 grid-rows-8 border-[6px] lg:border-[10px] border-slate-800 shadow-3xl rounded-xl overflow-hidden bg-slate-900 relative">
             {displayGame.board().map((row: any[], rI: number) => row.map((piece: any, cI: number) => {
               const sq = `${'abcdefgh'[cI]}${8 - rI}`;
               const isDark = (rI + cI) % 2 === 1;
@@ -158,37 +183,67 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({ game, onMove, playerTop,
                 <div 
                   key={sq} 
                   onClick={() => handleSquareClick(sq)} 
-                  className={`relative flex items-center justify-center cursor-pointer select-none ${isDark ? 'bg-[#3b66d6]' : 'bg-[#f0f4ff]'} ${isSelected ? 'ring-4 ring-inset ring-yellow-400/60 bg-yellow-200/40' : ''}`}
+                  className={`relative flex items-center justify-center cursor-pointer select-none transition-all duration-200 ${isDark ? 'bg-[#3b66d6]' : 'bg-[#f0f4ff]'} ${isSelected ? 'ring-4 ring-inset ring-yellow-400/80 bg-yellow-200/50' : ''}`}
                 >
-                  {cI === 0 && <span className={`absolute top-0.5 left-0.5 text-[8px] lg:text-[10px] font-bold ${isDark ? 'text-white/40' : 'text-blue-900/40'}`}>{8 - rI}</span>}
-                  {rI === 7 && <span className={`absolute bottom-0.5 right-0.5 text-[8px] lg:text-[10px] font-bold ${isDark ? 'text-white/40' : 'text-blue-900/40'}`}>{'abcdefgh'[cI]}</span>}
-                  {pieceKey && <img src={PIECE_IMAGES[pieceKey]} className="w-[90%] h-[90%] z-10 drop-shadow-md" />}
-                  {isPossible && <div className="absolute w-3 h-3 lg:w-5 lg:h-5 rounded-full bg-black/15 z-20" />}
+                  {cI === 0 && <span className={`absolute top-0.5 left-0.5 text-[8px] lg:text-[9px] font-black ${isDark ? 'text-white/30' : 'text-blue-900/30'}`}>{8 - rI}</span>}
+                  {rI === 7 && <span className={`absolute bottom-0.5 right-0.5 text-[8px] lg:text-[9px] font-black ${isDark ? 'text-white/30' : 'text-blue-900/30'}`}>{'abcdefgh'[cI]}</span>}
+                  {pieceKey && <img src={PIECE_IMAGES[pieceKey]} className="w-[90%] h-[90%] z-10 drop-shadow-xl transform active:scale-110 transition-transform" />}
+                  {isPossible && <div className="absolute w-3 h-3 lg:w-4 lg:h-4 rounded-full bg-black/20 z-20" />}
                 </div>
               );
             }))}
+            {historyIndex !== -1 && (
+              <div className="absolute inset-0 bg-blue-600/5 pointer-events-none flex items-center justify-center">
+                 <div className="bg-blue-600 text-white px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl">Analyse Historique</div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Vous (Bas) */}
-        <div className="w-full max-w-[550px] lg:max-w-[300px] flex flex-row lg:flex-col justify-between items-center lg:items-start gap-4 order-3">
+        {/* Bottom Player (You) */}
+        <div className="w-full max-w-[500px] lg:max-w-[280px] flex flex-row lg:flex-col justify-between items-center lg:items-start gap-4 order-3">
           <div className="flex items-center space-x-3">
             <div className="w-12 h-12 lg:w-16 lg:h-16 rounded-2xl bg-blue-600 border border-blue-400 flex items-center justify-center font-black text-xl lg:text-3xl shadow-xl shadow-blue-500/20">
-              {playerBottom?.name?.charAt(0)}
+              {playerBottom?.avatar || playerBottom?.name?.charAt(0)}
             </div>
             <div>
-              <p className="text-sm lg:text-xl font-black text-white">{playerBottom?.name}</p>
+              <p className="text-sm lg:text-lg font-black text-white">{playerBottom?.name}</p>
               <p className="text-[10px] lg:text-xs font-black text-blue-400 uppercase tracking-widest">{playerBottom?.elo} ELO</p>
             </div>
           </div>
-          <div className={`px-4 py-2 lg:px-6 lg:py-4 rounded-2xl font-mono text-2xl lg:text-5xl font-black min-w-[100px] lg:min-w-[180px] text-center shadow-2xl transition-colors ${wTime < 30 && wTime > 0 ? 'bg-red-500 animate-pulse' : 'bg-slate-800'}`}>
+          <div className={`px-4 py-2 lg:px-6 lg:py-4 rounded-2xl font-mono text-2xl lg:text-5xl font-black min-w-[100px] lg:min-w-[160px] text-center shadow-2xl transition-all duration-300 ${wTime < 30 && wTime > 0 ? 'bg-red-600 animate-pulse' : 'bg-slate-800'}`}>
             {formatTime(wTime)}
           </div>
         </div>
       </div>
 
-      <div className="mt-8 flex space-x-4">
-        <button onClick={() => { if(confirm("Voulez-vous abandonner ?")) onExit(); }} className="px-8 py-4 bg-red-600 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-red-500/20 active:scale-95 transition-all">Abandonner</button>
+      {/* Controls */}
+      <div className="mt-8 flex flex-col items-center gap-6">
+        <div className="flex items-center space-x-3 bg-slate-900/50 p-2 rounded-[24px] border border-white/5">
+            <button 
+              onClick={() => navigateHistory('back')} 
+              className="p-4 bg-slate-800 rounded-2xl hover:bg-slate-700 transition-all active:scale-90 disabled:opacity-30"
+              disabled={game.history().length === 0}
+            >
+                <ChevronLeft size={24}/>
+            </button>
+            <div className="px-4 text-[10px] font-black uppercase tracking-widest text-slate-500 w-24 text-center">
+                {historyIndex === -1 ? "LIVE" : `Coup ${historyIndex + 1}`}
+            </div>
+            <button 
+              onClick={() => navigateHistory('next')} 
+              className="p-4 bg-slate-800 rounded-2xl hover:bg-slate-700 transition-all active:scale-90 disabled:opacity-30"
+              disabled={historyIndex === -1}
+            >
+                <ChevronRight size={24}/>
+            </button>
+        </div>
+        <button 
+          onClick={() => { if(confirm("Voulez-vous abandonner ?")) onExit(); }} 
+          className="px-12 py-4 bg-red-600/20 text-red-500 border border-red-500/30 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all hover:bg-red-600 hover:text-white"
+        >
+          Abandonner
+        </button>
       </div>
     </div>
   );

@@ -384,9 +384,13 @@ export const TRANSLATIONS = {
 };
 
 export const MOCK_BOTS = [
-  { id: 'bot_1', name: 'Junior', elo: 400, description: 'Idéal pour apprendre. Fait souvent des gaffes.', avatar: '👶', level: 'easy' },
-  { id: 'bot_2', name: 'Carl', elo: 800, description: 'Joueur du dimanche. Un peu plus solide.', avatar: '🙂', level: 'easy' },
-  { id: 'bot_3', name: 'Sarah', elo: 1200, description: 'Bases solides. Ne tombe pas dans les pièges.', avatar: '🧐', level: 'medium' },
-  { id: 'bot_4', name: 'Tom', elo: 1600, description: 'Style agressif. Attention à votre Dame !', avatar: '⚔️', level: 'medium' },
-  { id: 'bot_5', name: 'Grand Master AI', elo: 2400, description: 'Niveau Maître. Quasiment imbattable.', avatar: '🤖', level: 'hard' },
+  { id: 'bot_1', name: 'Le Débutant', elo: 400, description: 'Fait beaucoup de gaffes. Idéal pour commencer.', avatar: '👶', level: 'easy' },
+  { id: 'bot_2', name: 'Zéro Fautes', elo: 800, description: 'Un peu plus solide, commence à punir les erreurs.', avatar: '🙂', level: 'easy' },
+  { id: 'bot_3', name: 'Tactique Boy', elo: 1200, description: 'Attention aux fourchettes et aux clouages !', avatar: '🧐', level: 'medium' },
+  { id: 'bot_4', name: 'Sarah G.', elo: 1450, description: 'Style agressif, elle adore sortir sa dame tôt.', avatar: '💁‍♀️', level: 'medium' },
+  { id: 'bot_5', name: 'Stockfish Lite', elo: 1800, description: 'Une intelligence artificielle redoutable.', avatar: '🤖', level: 'hard' },
+  { id: 'bot_6', name: 'Magnus Bot', elo: 2850, description: 'Le champion du monde virtuel. Bonne chance.', avatar: '🐐', level: 'hard' },
+  { id: 'bot_7', name: 'Kaspar Bot', elo: 2600, description: 'Attaque constante sur le roi.', avatar: '🐯', level: 'hard' },
+  { id: 'bot_8', name: 'Le Professeur', elo: 1600, description: 'Un jeu de position impeccable.', avatar: '👨‍🏫', level: 'medium' },
+  { id: 'bot_9', name: 'Kévin', elo: 600, description: 'Joueur impulsif, souvent amusant.', avatar: '🤠', level: 'easy' },
 ];
