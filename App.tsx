@@ -12,13 +12,13 @@ import {
 } from 'lucide-react';
 import { Chess } from 'chess.js';
 
-// --- Modal Universel ---
+// --- Modal Universel (Correction du Gap en haut) ---
 const Modal = ({ isOpen, onClose, title, children }: any) => {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
-            <div className="fixed top-0 left-0 w-full h-full bg-slate-950/80 backdrop-blur-md transition-opacity" onClick={onClose}></div>
-            <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-[40px] shadow-3xl overflow-hidden animate-fade-in-up border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
+            <div className="fixed inset-0 w-full h-full bg-slate-950/80 backdrop-blur-md transition-opacity" onClick={onClose}></div>
+            <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-[40px] shadow-3xl overflow-hidden animate-fade-in-up border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh]">
                 <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/20">
                     <h3 className="text-2xl font-black tracking-tighter">{title}</h3>
                     <button onClick={onClose} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"><X/></button>
@@ -29,8 +29,8 @@ const Modal = ({ isOpen, onClose, title, children }: any) => {
     );
 };
 
-// --- Helper: Compte à Rebours ---
-const getCountdownText = (date: string) => {
+// --- Helper: Calcul Compte à rebours ---
+const getTournamentCountdown = (date: string) => {
     const diff = new Date(date).getTime() - Date.now();
     if (diff <= 0) return null;
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -40,7 +40,7 @@ const getCountdownText = (date: string) => {
     return `Dans ${hours}h ${mins}m`;
 };
 
-// --- Liste des Tournois ---
+// --- Liste des Tournois avec Persistance Inscription ---
 const TournamentList = ({ userProfile }: { userProfile: any }) => {
   const [tournaments, setTournaments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,11 +65,12 @@ const TournamentList = ({ userProfile }: { userProfile: any }) => {
     if (!userProfile) return alert("Veuillez vous connecter.");
     if (registeredIds.includes(id)) return;
     setLoading(true);
-    const { error } = await supabase.from('tournament_registrations').insert({ tournament_id: id, player_id: userProfile.id });
-    if (!error) {
+    try {
+        const { error } = await supabase.from('tournament_registrations').insert({ tournament_id: id, player_id: userProfile.id });
+        if (error) throw error;
         setRegisteredIds(prev => [...prev, id]);
         fetchData();
-    } else { alert("Erreur."); }
+    } catch (err) { alert("Erreur d'inscription."); }
     setLoading(false);
   };
 
@@ -78,13 +79,13 @@ const TournamentList = ({ userProfile }: { userProfile: any }) => {
   return (
     <div className="space-y-6 animate-fade-in pb-10">
       <div className="mb-10">
-          <h2 className="text-4xl font-black tracking-tighter">Tournois</h2>
-          <p className="text-slate-500 font-bold">Compétition officielle de haut niveau.</p>
+          <h2 className="text-4xl font-black tracking-tighter uppercase italic">Tournois Officiels</h2>
+          <p className="text-slate-500 font-bold">Inscrivez-vous pour marquer l'histoire des échecs en RDC.</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {tournaments.map(t => {
           const isRegistered = registeredIds.includes(t.id);
-          const countdown = getCountdownText(t.start_date);
+          const countdown = getTournamentCountdown(t.start_date);
           return (
             <div key={t.id} className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-xl transition-all group">
               <div className="flex justify-between items-start mb-6">
@@ -93,11 +94,11 @@ const TournamentList = ({ userProfile }: { userProfile: any }) => {
                 </div>
                 <div className="flex flex-col items-end gap-2">
                     <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${t.status === 'live' ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-100 text-slate-400 dark:bg-slate-800'}`}>{t.status}</span>
-                    {countdown && t.status !== 'finished' && <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest flex items-center bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-lg"><Clock size={12} className="mr-1.5"/> {countdown}</span>}
+                    {countdown && t.status !== 'finished' && <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest flex items-center bg-blue-50 dark:bg-blue-900/30 px-3 py-1 rounded-xl"><Clock size={12} className="mr-2"/> {countdown}</span>}
                 </div>
               </div>
-              <h3 className="text-xl font-black mb-1 truncate">{t.name}</h3>
-              <p className="text-slate-500 font-bold text-sm mb-6">{t.category} • {t.registered_count} Joueurs</p>
+              <h3 className="text-2xl font-black mb-1 truncate tracking-tight">{t.name}</h3>
+              <p className="text-slate-500 font-bold text-sm mb-8">{t.category} • {t.registered_count} Joueurs max</p>
               
               <button 
                 onClick={() => handleRegister(t.id)}
@@ -114,7 +115,7 @@ const TournamentList = ({ userProfile }: { userProfile: any }) => {
   );
 };
 
-// --- Administration ---
+// --- Console Administration ---
 const AdminConsole = ({ userProfile }: { userProfile: any }) => {
     const [tournaments, setTournaments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -152,42 +153,48 @@ const AdminConsole = ({ userProfile }: { userProfile: any }) => {
     return (
         <div className="space-y-10 animate-fade-in pb-20">
             <div className="flex justify-between items-center">
-                <h2 className="text-4xl font-black tracking-tighter">Admin</h2>
-                <button onClick={() => { setSelectedT(null); setFormOpen(true); }} className="px-6 py-4 bg-blue-600 text-white rounded-[24px] font-black flex items-center space-x-2">
-                    <Plus size={20}/> <span>Ajouter</span>
+                <h2 className="text-4xl font-black tracking-tighter italic uppercase">Admin Console</h2>
+                <button onClick={() => { setSelectedT(null); setFormOpen(true); }} className="px-8 py-4 bg-blue-600 text-white rounded-[24px] font-black flex items-center space-x-2 shadow-xl shadow-blue-500/20 active:scale-95 transition-transform">
+                    <Plus size={20}/> <span>Ajouter un Événement</span>
                 </button>
             </div>
             <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 overflow-hidden shadow-sm">
                 <div className="divide-y divide-slate-50 dark:divide-slate-800">
                     {tournaments.map((t) => (
-                        <div key={t.id} className="p-8 flex justify-between items-center">
+                        <div key={t.id} className="p-8 flex justify-between items-center group hover:bg-slate-50 dark:hover:bg-slate-800/30">
                             <div>
-                                <p className="font-black">{t.name}</p>
+                                <p className="font-black text-xl tracking-tight">{t.name}</p>
                                 <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">{new Date(t.start_date).toLocaleDateString()}</p>
                             </div>
-                            <button onClick={() => { setSelectedT(t); setFormOpen(true); }} className="p-3 bg-blue-50 text-blue-600 rounded-xl"><Edit3 size={18}/></button>
+                            <button onClick={() => { setSelectedT(t); setFormOpen(true); }} className="p-4 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-100 transition-colors"><Edit3 size={18}/></button>
                         </div>
                     ))}
                 </div>
             </div>
-            <Modal isOpen={formOpen} onClose={() => setFormOpen(false)} title={selectedT ? "Modifier" : "Nouveau"}>
-                <form onSubmit={handleSave} className="space-y-6">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Nom</label>
-                      <input name="name" defaultValue={selectedT?.name} required className="w-full p-5 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 font-bold" />
+            <Modal isOpen={formOpen} onClose={() => setFormOpen(false)} title={selectedT ? "Modifier l'événement" : "Nouvel événement"}>
+                <form onSubmit={handleSave} className="space-y-8">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Nom du tournoi</label>
+                      <input name="name" defaultValue={selectedT?.name} placeholder="Nom" required className="w-full p-5 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 font-bold outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Date</label>
-                      <input name="start_date" type="datetime-local" defaultValue={selectedT?.start_date ? new Date(selectedT.start_date).toISOString().slice(0, 16) : ''} required className="w-full p-5 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 font-bold" />
+                    <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Date de début</label>
+                          <input name="start_date" type="datetime-local" defaultValue={selectedT?.start_date ? new Date(selectedT.start_date).toISOString().slice(0, 16) : ''} required className="w-full p-5 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 font-bold" />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Max Joueurs</label>
+                          <input name="max_players" type="number" defaultValue={selectedT?.max_players || 100} className="w-full p-5 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 font-bold" />
+                        </div>
                     </div>
-                    <button type="submit" className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs">Enregistrer l'événement</button>
+                    <button type="submit" className="w-full py-6 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-blue-500/20 active:scale-95 transition-all">Enregistrer</button>
                 </form>
             </Modal>
         </div>
     );
 };
 
-// --- Arène de jeu (IA Améliorée + Bot Timer) ---
+// --- Arène de Jeu (IA Renforcée & Persistance Locale) ---
 const Arena = ({ userProfile }: { userProfile: any }) => {
     const [game, setGame] = useState(new Chess());
     const [activeGame, setActiveGame] = useState<any>(null);
@@ -195,6 +202,7 @@ const Arena = ({ userProfile }: { userProfile: any }) => {
     const [time, setTime] = useState(10);
     const [bot, setBot] = useState(MOCK_BOTS[0]);
 
+    // Chargement de la partie sauvegardée
     useEffect(() => {
         const saved = localStorage.getItem('chess_game_save');
         if (saved) {
@@ -207,17 +215,17 @@ const Arena = ({ userProfile }: { userProfile: any }) => {
         }
     }, []);
 
-    const saveState = (fen: string, config: any) => {
+    const saveGameState = (fen: string, config: any) => {
         localStorage.setItem('chess_game_save', JSON.stringify({ fen, config }));
     };
 
     const startGame = () => {
-        const opponent = mode === 'bot' ? { name: bot.name, elo: bot.elo, avatar: bot.avatar } : { name: 'Adversaire_X', elo: 1420 };
+        const opponent = mode === 'bot' ? { name: bot.name, elo: bot.elo, avatar: bot.avatar } : { name: 'Adversaire_Mystère', elo: 1420 };
         const newGame = new Chess();
         const config = { opponent, whiteTime: time * 60, blackTime: time * 60, mode, botLevel: bot.level };
         setGame(newGame);
         setActiveGame(config);
-        saveState(newGame.fen(), config);
+        saveGameState(newGame.fen(), config);
     };
 
     const handleMove = (from: string, to: string) => {
@@ -226,19 +234,23 @@ const Arena = ({ userProfile }: { userProfile: any }) => {
             const move = temp.move({ from, to, promotion: 'q' });
             if (move) {
                 setGame(temp);
-                saveState(temp.fen(), activeGame);
+                saveGameState(temp.fen(), activeGame);
 
                 if (activeGame.mode === 'bot' && !temp.isGameOver() && temp.turn() === 'b') {
-                    // IA Améliorée avec Heuristique de matériel
+                    // IA Améliorée : Analyse du matériel et position
                     setTimeout(() => {
                         const botMoves = temp.moves({ verbose: true });
                         if (botMoves.length > 0) {
                             const values: any = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
-                            // Trie par matériel capturé descendant
-                            botMoves.sort((a, b) => (b.captured ? values[b.captured] : 0) - (a.captured ? values[a.captured] : 0));
+                            // Trie les coups par valeur de capture
+                            botMoves.sort((a, b) => {
+                                const valA = a.captured ? values[a.captured] : 0;
+                                const valB = b.captured ? values[b.captured] : 0;
+                                return valB - valA;
+                            });
                             
                             let chosen = botMoves[0];
-                            // Introduit des erreurs selon le niveau
+                            // Introduit une marge d'erreur basée sur le niveau
                             if (activeGame.botLevel === 'easy' && Math.random() > 0.3) {
                                 chosen = botMoves[Math.floor(Math.random() * botMoves.length)];
                             } else if (activeGame.botLevel === 'medium' && Math.random() > 0.7) {
@@ -247,9 +259,9 @@ const Arena = ({ userProfile }: { userProfile: any }) => {
 
                             temp.move(chosen);
                             setGame(new Chess(temp.fen()));
-                            saveState(temp.fen(), activeGame);
+                            saveGameState(temp.fen(), activeGame);
                         }
-                    }, 1000);
+                    }, 1100);
                 }
                 return true;
             }
@@ -267,7 +279,7 @@ const Arena = ({ userProfile }: { userProfile: any }) => {
                 whiteTime={activeGame.whiteTime}
                 blackTime={activeGame.blackTime}
                 onTimeOut={(winner) => {
-                    alert(`${winner === 'white' ? 'Blancs' : 'Noirs'} gagnent au temps !`);
+                    alert(`Partie terminée ! Les ${winner === 'white' ? 'Blancs' : 'Noirs'} gagnent au temps.`);
                     setActiveGame(null);
                     localStorage.removeItem('chess_game_save');
                 }}
@@ -282,7 +294,7 @@ const Arena = ({ userProfile }: { userProfile: any }) => {
     return (
         <div className="max-w-6xl mx-auto py-6 px-4 animate-fade-in pb-20">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-                <div className="lg:col-span-8 bg-white dark:bg-slate-900 p-10 lg:p-14 rounded-[56px] shadow-sm border border-slate-100 dark:border-slate-800 h-fit">
+                <div className="lg:col-span-8 bg-white dark:bg-slate-900 p-10 lg:p-14 rounded-[56px] shadow-sm border border-slate-100 dark:border-slate-800">
                     <div className="flex p-2 bg-slate-50 dark:bg-slate-800 rounded-3xl mb-12">
                         <button onClick={() => setMode('online')} className={`flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${mode === 'online' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-xl' : 'text-slate-400'}`}>Partie Rapide</button>
                         <button onClick={() => setMode('bot')} className={`flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${mode === 'bot' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-xl' : 'text-slate-400'}`}>Vs IA</button>
@@ -292,7 +304,7 @@ const Arena = ({ userProfile }: { userProfile: any }) => {
                             <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 block">Durée de la partie</label>
                             <div className="grid grid-cols-3 gap-3">
                                 {[1, 3, 5, 10, 30, 60].map(m => (
-                                    <button key={m} onClick={() => setTime(m)} className={`py-4 rounded-2xl border-2 font-black text-sm transition-all ${time === m ? 'bg-blue-600 text-white border-blue-600 shadow-xl shadow-blue-500/20' : 'bg-slate-50 dark:bg-slate-800 border-transparent hover:border-blue-500/30'}`}>
+                                    <button key={m} onClick={() => setTime(m)} className={`py-4 rounded-2xl border-2 font-black text-sm transition-all ${time === m ? 'bg-blue-600 text-white border-blue-600 shadow-xl shadow-blue-500/20' : 'bg-slate-50 dark:bg-slate-800 border-transparent'}`}>
                                         {m} min
                                     </button>
                                 ))}
@@ -304,8 +316,8 @@ const Arena = ({ userProfile }: { userProfile: any }) => {
                         </button>
                     </div>
                 </div>
-                <div className="lg:col-span-4 space-y-6 h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Choisir l'adversaire IA</h4>
+                <div className="lg:col-span-4 space-y-4 h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Choisir l'adversaire</h4>
                     {MOCK_BOTS.map(b => (
                         <div 
                             key={b.id} 
@@ -315,7 +327,7 @@ const Arena = ({ userProfile }: { userProfile: any }) => {
                             <div className="flex items-center space-x-4">
                                 <span className="text-4xl filter drop-shadow-md">{b.avatar}</span>
                                 <div>
-                                    <p className="font-black leading-tight">{b.name}</p>
+                                    <p className="font-black leading-tight truncate">{b.name}</p>
                                     <p className={`text-[9px] font-black uppercase tracking-widest ${bot.id === b.id && mode === 'bot' ? 'text-blue-100' : 'text-blue-600'}`}>{b.elo} ELO</p>
                                 </div>
                             </div>
@@ -327,10 +339,10 @@ const Arena = ({ userProfile }: { userProfile: any }) => {
     );
 };
 
-// --- Page Clubs Minimaliste ---
+// --- Page Clubs Simplifiée ---
 const ClubsPage = () => (
-    <div className="h-[60vh] flex items-center justify-center animate-fade-in">
-        <h2 className="text-6xl font-black tracking-tighter opacity-10 italic uppercase select-none">À venir</h2>
+    <div className="h-[60vh] flex items-center justify-center animate-fade-in select-none">
+        <h2 className="text-7xl lg:text-9xl font-black tracking-tighter opacity-[0.03] italic uppercase pointer-events-none">À venir</h2>
     </div>
 );
 
@@ -381,17 +393,17 @@ const App: React.FC = () => {
        {currentPage === 'admin' && <AdminConsole userProfile={userProfile} />}
        {currentPage === 'clubs' && <ClubsPage />}
        {currentPage === 'profile' && userProfile && (
-           <div className="max-w-xl mx-auto bg-white dark:bg-slate-900 p-12 rounded-[56px] border border-slate-100 dark:border-slate-800 text-center animate-fade-in">
-               <div className="w-32 h-32 bg-blue-600 rounded-[32px] mx-auto mb-8 flex items-center justify-center text-5xl text-white font-black border-4 border-white dark:border-slate-800 shadow-2xl">
+           <div className="max-w-xl mx-auto bg-white dark:bg-slate-900 p-12 rounded-[56px] border border-slate-100 dark:border-slate-800 text-center animate-fade-in shadow-sm">
+               <div className="w-32 h-32 bg-blue-600 rounded-[32px] mx-auto mb-8 flex items-center justify-center text-5xl text-white font-black overflow-hidden border-4 border-white dark:border-slate-800 shadow-2xl">
                    {userProfile.avatar_url ? <img src={userProfile.avatar_url} className="w-full h-full object-cover"/> : userProfile.username?.charAt(0).toUpperCase()}
                </div>
                <h2 className="text-4xl font-black mb-2 tracking-tighter">{userProfile.username}</h2>
                <p className="text-blue-600 font-black text-xl mb-10">{userProfile.elo_rapid} ELO</p>
                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl mb-10 border border-slate-100 dark:border-slate-700">
-                  <p className="text-[10px] font-black uppercase text-slate-400 mb-1 tracking-widest">Compte</p>
+                  <p className="text-[10px] font-black uppercase text-slate-400 mb-1 tracking-widest">Niveau d'accès</p>
                   <p className="font-bold text-blue-600 uppercase tracking-widest text-sm">{userProfile.role}</p>
                </div>
-               <button onClick={() => alert("Paramètres bientôt disponibles.")} className="w-full py-5 bg-slate-100 dark:bg-slate-800 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center space-x-2 transition-all">
+               <button onClick={() => alert("Edition bientôt disponible.")} className="w-full py-5 bg-slate-100 dark:bg-slate-800 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center space-x-2 hover:bg-blue-600 hover:text-white transition-all">
                    <Edit3 size={18}/> <span>Éditer Profil</span>
                </button>
            </div>
