@@ -18,6 +18,24 @@ export const signOut = async () => {
   return await supabase.auth.signOut();
 };
 
+export const getTournaments = async () => {
+  const { data, error } = await supabase
+    .from('tournaments')
+    .select('*')
+    .order('start_date', { ascending: true });
+  if (error) throw error;
+  return data;
+};
+
+export const getAllProfiles = async () => {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .order('elo_rapid', { ascending: false });
+  if (error) throw error;
+  return data;
+};
+
 export const uploadAvatar = async (userId: string, file: File) => {
   const fileExt = file.name.split('.').pop();
   const fileName = `${userId}/${Math.random()}.${fileExt}`;

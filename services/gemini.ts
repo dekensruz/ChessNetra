@@ -1,32 +1,19 @@
+
 import { GoogleGenAI } from "@google/genai";
 
-export const getChessAdvice = async (fen: string, question: string) => {
+export const getChessAdvice = async (fen: string, question: string = "Quelle est la meilleure stratégie dans cette position ?") => {
   try {
-    // Initialisation LAZY (paresseuse) : On initialise le client seulement quand on en a besoin.
-    // Cela empêche l'application de planter au démarrage (White Screen) si process.env.API_KEY
-    // est indéfini ou provoque une erreur lors du chargement initial du module.
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    // Use gemini-3-pro-preview for complex Reasoning tasks like chess analysis.
-    const model = 'gemini-3-pro-preview';
-    const prompt = `
-      You are a Grandmaster Chess Coach. 
-      The current board position in FEN is: ${fen}.
-      User question: ${question}.
-      
-      Provide a concise, helpful strategic analysis suitable for an intermediate player.
-      Keep it under 100 words.
-    `;
-
-    // Accessing .text property directly as per @google/genai SDK guidelines
     const response = await ai.models.generateContent({
-      model: model,
-      contents: prompt,
+      model: 'gemini-3-pro-preview',
+      contents: `Tu es un Maître International d'échecs. Analyse la position FEN suivante : ${fen}. 
+      Réponds à la question suivante de manière concise (3 phrases max) : ${question}. 
+      Donne un conseil tactique précis.`,
     });
 
     return response.text;
   } catch (error) {
     console.error("Gemini Error:", error);
-    return "Désolé, le coach est momentanément indisponible (Vérifiez la clé API).";
+    return "Désolé, le coach est indisponible pour le moment.";
   }
 };

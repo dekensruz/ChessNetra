@@ -5,229 +5,297 @@ import { LandingPage } from './components/LandingPage';
 import { ChessBoard } from './components/ChessBoard';
 import { AuthModal } from './components/AuthModal';
 import { TRANSLATIONS, MOCK_BOTS } from './constants';
-import { Language, Theme, UserProfile, Tournament } from './types';
-import { supabase, uploadAvatar } from './services/supabase';
+import { Language, Theme, UserProfile } from './types';
+import { supabase, getTournaments, getAllProfiles } from './services/supabase';
 import { 
-  Users, Play, CheckCircle, Plus, 
-  Trophy, Loader2, X, Circle, Calendar, Trash2, Swords, UserPlus, Zap, Search, Camera, Save, Edit3, Settings
+  Users, Trophy, Loader2, Plus, Trash2, Edit3, Swords, Shield, Search, ChevronRight, MoreVertical, CheckCircle
 } from 'lucide-react';
 import { Chess } from 'chess.js';
 
-interface Participant {
-    tournament_id: string;
-    player_id: string;
-    username: string;
-    full_name: string;
-    elo_rapid: number;
-    country: string;
-    registered_at: string;
-}
+// --- Composants Internes ---
 
-interface TournamentWithOrganizer extends Tournament {
-    organizer_username?: string;
-    organizer_full_name?: string;
-    organizer_avatar?: string;
-}
+const TournamentList = () => {
+  const [tournaments, setTournaments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [registeredIds, setRegisteredIds] = useState<string[]>([]);
 
-const Badge = ({ children, variant = 'info' }: { children: React.ReactNode, variant?: 'info' | 'success' | 'warning' | 'error' | 'live' }) => {
-    const styles = {
-        info: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-        success: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-        warning: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-        error: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-        live: 'bg-red-500 text-white animate-pulse'
-    };
-    return (
-        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${styles[variant]}`}>
-            {children}
-        </span>
-    );
-};
+  useEffect(() => {
+    getTournaments()
+      .then(setTournaments)
+      .finally(() => setLoading(false));
+  }, []);
 
-const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean, onClose: () => void, title: string, children: React.ReactNode }) => {
-    if (!isOpen) return null;
-    return (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6">
-            <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
-            <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-t-[40px] sm:rounded-[40px] shadow-2xl overflow-hidden animate-fade-in-up border border-slate-200 dark:border-slate-800 flex flex-col max-h-[95vh]">
-                <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center shrink-0">
-                    <h3 className="text-2xl font-black tracking-tighter">{title}</h3>
-                    <button onClick={onClose} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"><X size={24} /></button>
+  const handleRegister = (id: string) => {
+    if (registeredIds.includes(id)) return;
+    setRegisteredIds(prev => [...prev, id]);
+    alert("Inscription réussie !");
+  };
+
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
+          <div>
+              <h2 className="text-4xl font-black tracking-tighter">Tournois</h2>
+              <p className="text-slate-500 font-bold">Rejoignez la compétition officielle.</p>
+          </div>
+          <div className="flex space-x-2">
+              <button className="px-6 py-3 bg-slate-100 dark:bg-slate-800 rounded-2xl font-black text-xs uppercase tracking-widest">Ouverts</button>
+              <button className="px-6 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest">Inscriptions</button>
+          </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {tournaments.length > 0 ? tournaments.map(t => {
+          const isRegistered = registeredIds.includes(t.id);
+          return (
+            <div key={t.id} className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-xl transition-all">
+              <div className="flex justify-between items-start mb-6">
+                <div className={`p-4 rounded-3xl ${t.status === 'live' ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-600'} dark:bg-opacity-10`}>
+                    <Trophy size={32}/>
                 </div>
-                <div className="p-8 overflow-y-auto custom-scrollbar flex-1">
-                    {children}
-                </div>
+                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${t.status === 'live' ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-100 text-slate-400 dark:bg-slate-800'}`}>{t.status}</span>
+              </div>
+              <h3 className="text-xl font-black mb-1 truncate">{t.name}</h3>
+              <p className="text-slate-500 font-bold text-sm mb-6">{t.category} • {t.registered_count + (isRegistered ? 1 : 0)}/{t.max_players} joueurs</p>
+              <button 
+                onClick={() => handleRegister(t.id)}
+                disabled={isRegistered}
+                className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center space-x-2 ${isRegistered ? 'bg-green-100 text-green-600 dark:bg-green-900/20' : 'bg-slate-900 dark:bg-slate-800 text-white hover:bg-blue-600'}`}
+              >
+                {isRegistered ? <><CheckCircle size={16}/> <span>Inscrit</span></> : <><span>S'inscrire</span> <ChevronRight size={14} /></>}
+              </button>
             </div>
-        </div>
-    );
+          );
+        }) : (
+          <div className="col-span-full py-20 text-center text-slate-400 font-bold">Aucun tournoi planifié pour le moment.</div>
+        )}
+      </div>
+    </div>
+  );
 };
 
-// --- Composant Profile ---
-const ProfilePage: React.FC<{ profile: UserProfile, onUpdate: () => void }> = ({ profile, onUpdate }) => {
-    const [editing, setEditing] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [formData, setFormData] = useState({ 
-        username: profile.username, 
-        full_name: profile.full_name,
-        bio: (profile as any).bio || '' 
-    });
-    const [avatarFile, setAvatarFile] = useState<File | null>(null);
-    const [preview, setPreview] = useState(profile.avatar_url);
+const AdminConsole = () => {
+    const [users, setUsers] = useState<any[]>([]);
+    const [tournaments, setTournaments] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files?.[0]) {
-            setAvatarFile(e.target.files[0]);
-            setPreview(URL.createObjectURL(e.target.files[0]));
+    useEffect(() => {
+        Promise.all([getAllProfiles(), getTournaments()])
+            .then(([p, t]) => {
+                setUsers(p);
+                setTournaments(t);
+            })
+            .finally(() => setLoading(false));
+    }, []);
+
+    const handleEdit = (type: string, id: string) => {
+        alert(`Modification de ${type} (ID: ${id}) - Cette fonctionnalité nécessite des droits étendus.`);
+    };
+
+    const handleDelete = (type: string, id: string) => {
+        if(confirm(`Supprimer ce ${type} ?`)) {
+            alert(`Suppression de ${id} simulée.`);
         }
     };
 
-    const handleSave = async () => {
-        setLoading(true);
-        try {
-            let avatarUrl = profile.avatar_url;
-            if (avatarFile) {
-                avatarUrl = await uploadAvatar(profile.id, avatarFile);
-            }
-            const { error } = await supabase.from('profiles').update({
-                username: formData.username,
-                full_name: formData.full_name,
-                bio: formData.bio,
-                avatar_url: avatarUrl
-            }).eq('id', profile.id);
-            if (error) throw error;
-            setEditing(false);
-            onUpdate();
-        } catch (err: any) { alert(err.message); }
-        finally { setLoading(false); }
-    };
+    if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
 
     return (
-        <div className="max-w-2xl mx-auto bg-white dark:bg-slate-900 rounded-[48px] p-10 shadow-sm border border-slate-100 dark:border-slate-800 animate-fade-in">
-            <div className="relative w-40 h-40 mx-auto mb-10 group">
-                <div className="w-full h-full rounded-[48px] bg-blue-600 flex items-center justify-center text-5xl text-white font-black overflow-hidden shadow-2xl border-4 border-white dark:border-slate-800">
-                    {preview ? <img src={preview} className="w-full h-full object-cover" /> : profile.username.charAt(0).toUpperCase()}
+        <div className="space-y-10 animate-fade-in">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div>
+                    <h2 className="text-4xl font-black tracking-tighter">Console Admin</h2>
+                    <p className="text-slate-500 font-bold italic">"Gérez l'écosystème ChessNetra en temps réel."</p>
                 </div>
-                {editing && (
-                    <label className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-[48px] cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Camera className="text-white" size={32} />
-                        <input type="file" className="hidden" onChange={handleFileChange} accept="image/*" />
-                    </label>
-                )}
+                <button onClick={() => handleEdit('tournoi', 'new')} className="w-full md:w-auto px-8 py-4 bg-blue-600 text-white rounded-[24px] font-black flex items-center justify-center space-x-3 shadow-xl shadow-blue-500/20 active:scale-95 transition-transform">
+                    <Plus size={20}/> <span>Nouveau Tournoi</span>
+                </button>
             </div>
-            <div className="space-y-8">
-                {editing ? (
-                    <>
-                        <div className="space-y-4">
-                            <input value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="w-full p-5 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none font-bold" placeholder="Username" />
-                            <input value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} className="w-full p-5 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none font-bold" placeholder="Nom Complet" />
-                            <textarea rows={3} value={formData.bio} onChange={e => setFormData({...formData, bio: e.target.value})} className="w-full p-5 bg-slate-50 dark:bg-slate-800 rounded-2xl outline-none font-bold" placeholder="Parlez-nous de vous..." />
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-8">
+                    <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 overflow-hidden shadow-sm">
+                        <div className="p-6 border-b border-slate-50 dark:border-slate-800 flex justify-between items-center">
+                            <h4 className="font-black text-sm uppercase tracking-widest">Tournois</h4>
+                            <Search size={18} className="text-slate-400 cursor-pointer"/>
                         </div>
-                        <button onClick={handleSave} disabled={loading} className="w-full py-5 bg-blue-600 text-white rounded-3xl font-black flex items-center justify-center space-x-2 shadow-xl shadow-blue-500/20">
-                           {loading ? <Loader2 className="animate-spin" /> : <><Save size={20}/> <span>Enregistrer les modifications</span></>}
-                        </button>
-                    </>
-                ) : (
-                    <div className="text-center space-y-4">
-                        <h2 className="text-4xl font-black tracking-tighter">{profile.username}</h2>
-                        <div className="flex justify-center space-x-4">
-                            <Badge variant="info">{profile.elo_rapid} ELO</Badge>
-                            <Badge variant="success">Membre Certifié</Badge>
+                        <div className="divide-y divide-slate-50 dark:divide-slate-800 max-h-[400px] overflow-y-auto">
+                            {tournaments.map((t, i) => (
+                                <div key={i} className="p-6 flex justify-between items-center group hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                                    <div className="flex items-center space-x-4">
+                                        <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center font-black">{t.name.charAt(0)}</div>
+                                        <div>
+                                            <p className="font-black">{t.name}</p>
+                                            <p className="text-xs text-slate-400 font-bold uppercase">{new Date(t.start_date).toLocaleDateString()}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => handleEdit('tournoi', t.id)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100"><Edit3 size={18}/></button>
+                                        <button onClick={() => handleDelete('tournoi', t.id)} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100"><Trash2 size={18}/></button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                        <p className="text-slate-500 dark:text-slate-400 font-bold px-10 leading-relaxed">{(profile as any).bio || "Pas encore de biographie."}</p>
-                        <button onClick={() => setEditing(true)} className="px-12 py-4 bg-slate-100 dark:bg-slate-800 rounded-full font-black text-sm flex items-center mx-auto space-x-2 hover:bg-blue-600 hover:text-white transition-all">
-                           <Edit3 size={18} /> <span>Modifier mon Profil</span>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 overflow-hidden shadow-sm">
+                        <div className="p-6 border-b border-slate-50 dark:border-slate-800 flex justify-between items-center">
+                            <h4 className="font-black text-sm uppercase tracking-widest">Membres ({users.length})</h4>
+                            <Users size={18} className="text-slate-400"/>
+                        </div>
+                        <div className="divide-y divide-slate-50 dark:divide-slate-800 max-h-[400px] overflow-y-auto">
+                            {users.map((u, i) => (
+                                <div key={i} className="p-6 flex justify-between items-center group hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                                    <div className="flex items-center space-x-4">
+                                        <div className="w-10 h-10 bg-blue-600/10 rounded-xl flex items-center justify-center font-black text-blue-600 text-xs">
+                                            {u.avatar_url ? <img src={u.avatar_url} className="w-full h-full object-cover rounded-xl"/> : u.username?.charAt(0)}
+                                        </div>
+                                        <div>
+                                            <p className="font-black text-sm">{u.username}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase">{u.elo_rapid} ELO • {u.role}</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => handleEdit('utilisateur', u.id)} className="p-2.5 bg-slate-100 dark:bg-slate-800 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <MoreVertical size={16}/>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-blue-600 rounded-[40px] p-8 text-white flex flex-col justify-between shadow-2xl h-fit lg:sticky lg:top-8">
+                    <div>
+                        <Shield size={48} className="mb-6 opacity-40"/>
+                        <h4 className="text-2xl font-black mb-2 tracking-tight">Rôles & Sécurité</h4>
+                        <p className="text-blue-100 text-sm font-bold leading-relaxed">Les administrateurs peuvent valider les tournois, modérer le chat et gérer les sanctions.</p>
+                    </div>
+                    <div className="mt-12 space-y-4">
+                        <div className="p-4 bg-white/10 rounded-2xl border border-white/10">
+                            <p className="text-[10px] uppercase font-black tracking-widest opacity-60 mb-1">Total Joueurs</p>
+                            <p className="text-2xl font-black">{users.length}</p>
+                        </div>
+                        <button className="w-full py-4 bg-white text-blue-600 rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-blue-50 transition-colors">
+                            Journal d'audit
                         </button>
                     </div>
-                )}
+                </div>
             </div>
         </div>
     );
 };
 
-// --- Arena (Matchmaking & Jeux) ---
-const ArenaDashboard: React.FC<{ userProfile: UserProfile | null, lang: Language }> = ({ userProfile, lang }) => {
-    const [searching, setSearching] = useState(false);
+const Arena = ({ userProfile }: { userProfile: any }) => {
     const [game, setGame] = useState(new Chess());
-    const [currentGame, setCurrentGame] = useState<{ fen: string, opponent: any, whiteTime: number, blackTime: number } | null>(null);
-    const [customTime, setCustomTime] = useState(10);
+    const [activeGame, setActiveGame] = useState<any>(null);
+    const [mode, setMode] = useState<'online' | 'bot'>('online');
+    const [bot, setBot] = useState(MOCK_BOTS[0]);
+    const [time, setTime] = useState(10);
 
-    const startMatchmaking = (minutes: number) => {
-        setSearching(true);
-        setTimeout(() => {
-            const opponent = { name: 'GomaMaster_243', elo: 1350, avatar: null };
-            const newGame = new Chess();
-            setGame(newGame);
-            setCurrentGame({ fen: newGame.fen(), opponent, whiteTime: minutes * 60, blackTime: minutes * 60 });
-            setSearching(false);
-        }, 2500);
+    useEffect(() => {
+        const saved = localStorage.getItem('chess_netra_v2_save');
+        if (saved) {
+            try {
+                const data = JSON.parse(saved);
+                setGame(new Chess(data.fen));
+                setActiveGame(data);
+            } catch (e) { localStorage.removeItem('chess_netra_v2_save'); }
+        }
+    }, []);
+
+    const startGame = () => {
+        const opponent = mode === 'bot' ? { name: bot.name, elo: bot.elo } : { name: 'Adversaire_En_Ligne', elo: 1350 };
+        const newGame = new Chess();
+        setGame(newGame);
+        setActiveGame({ 
+          fen: newGame.fen(), 
+          opponent, 
+          whiteTime: time * 60, 
+          blackTime: time * 60,
+          mode
+        });
+        localStorage.setItem('chess_netra_v2_save', JSON.stringify({ fen: newGame.fen(), opponent, whiteTime: time*60, blackTime: time*60, mode }));
     };
 
-    const handleMove = useCallback((from: string, to: string) => {
+    const handleMove = (from: string, to: string) => {
         try {
             const move = game.move({ from, to, promotion: 'q' });
             if (move) {
-                setGame(new Chess(game.fen()));
-                setCurrentGame(prev => prev ? { ...prev, fen: game.fen() } : null);
+                const updatedGame = new Chess(game.fen());
+                setGame(updatedGame);
+                
+                if (mode === 'bot' && !updatedGame.isGameOver() && updatedGame.turn() === 'b') {
+                    setTimeout(() => {
+                        const botMoves = updatedGame.moves();
+                        if (botMoves.length > 0) {
+                            const randomMove = botMoves[Math.floor(Math.random() * botMoves.length)];
+                            updatedGame.move(randomMove);
+                            setGame(new Chess(updatedGame.fen()));
+                        }
+                    }, 800);
+                }
                 return true;
             }
         } catch (e) { return false; }
         return false;
-    }, [game]);
+    };
 
-    if (currentGame) {
+    if (activeGame) {
         return (
-            <div className="animate-fade-in-up">
-                <ChessBoard 
-                    game={game} 
-                    onMove={handleMove} 
-                    playerTop={{ name: currentGame.opponent.name, elo: currentGame.opponent.elo }}
-                    playerBottom={{ name: userProfile?.username || 'Moi', elo: userProfile?.elo_rapid || 1200, avatar: userProfile?.avatar_url }}
-                    whiteTime={currentGame.whiteTime}
-                    blackTime={currentGame.blackTime}
-                    onTimeOut={(winner) => alert(`Temps écoulé ! ${winner === 'white' ? 'Les Blancs gagnent' : 'Les Noirs gagnent'}.`)}
-                />
-            </div>
+            <ChessBoard 
+                game={game} 
+                onMove={handleMove} 
+                playerTop={activeGame.opponent}
+                playerBottom={{ name: userProfile?.username || 'Invité', elo: userProfile?.elo_rapid || 1200 }}
+                whiteTime={activeGame.whiteTime}
+                blackTime={activeGame.blackTime}
+                onTimeOut={(winner) => {
+                    alert(`Temps écoulé ! ${winner === 'white' ? 'Les blancs' : 'Les noirs'} ont gagné.`);
+                    setActiveGame(null);
+                    localStorage.removeItem('chess_netra_v2_save');
+                }}
+                onExit={() => {
+                    setActiveGame(null);
+                    localStorage.removeItem('chess_netra_v2_save');
+                }}
+            />
         );
     }
 
-    if (searching) return (
-        <div className="flex flex-col items-center justify-center py-40 animate-pulse">
-            <div className="relative w-32 h-32 mb-10">
-                <div className="absolute inset-0 border-8 border-blue-600/20 rounded-full"></div>
-                <div className="absolute inset-0 border-8 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-            <h2 className="text-3xl font-black mb-2">Recherche en cours...</h2>
-            <p className="text-slate-500 font-bold">Adversaire de niveau équivalent ({userProfile?.elo_rapid} ELO)</p>
-            <button onClick={() => setSearching(false)} className="mt-10 px-10 py-4 bg-red-100 text-red-600 rounded-2xl font-black">ANNULER</button>
-        </div>
-    );
-
     return (
-        <div className="max-w-4xl mx-auto space-y-12 animate-fade-in">
-            <div className="text-center">
-                <h2 className="text-5xl font-black tracking-tighter mb-4">Lancer une Partie</h2>
-                <p className="text-slate-500 font-bold text-lg italic">"Celui qui ne prend aucun risque ne gagne rien."</p>
-            </div>
-            <div className="bg-white dark:bg-slate-900 p-12 rounded-[56px] shadow-sm border border-slate-100 dark:border-slate-800">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-                    <div className="space-y-8">
+        <div className="max-w-4xl mx-auto py-6 px-4 animate-fade-in">
+            <div className="bg-white dark:bg-slate-900 p-10 lg:p-14 rounded-[56px] shadow-sm border border-slate-100 dark:border-slate-800">
+                <div className="flex p-2 bg-slate-50 dark:bg-slate-800 rounded-3xl mb-12 border border-slate-100 dark:border-slate-700">
+                    <button onClick={() => setMode('online')} className={`flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${mode === 'online' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-xl' : 'text-slate-400'}`}>En Ligne</button>
+                    <button onClick={() => setMode('bot')} className={`flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${mode === 'bot' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-xl' : 'text-slate-400'}`}>Ordinateur</button>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                    <div className="space-y-10">
                         <div>
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 block">Cadence de Jeu</label>
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 block">Cadence de jeu</label>
                             <div className="flex items-center space-x-6">
-                                <input type="range" min="1" max="120" value={customTime} onChange={e => setCustomTime(parseInt(e.target.value))} className="flex-1 h-3 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue-600" />
-                                <span className="text-4xl font-black text-blue-600 min-w-[100px]">{customTime}m</span>
+                                <input type="range" min="1" max="60" value={time} onChange={e => setTime(parseInt(e.target.value))} className="flex-1 accent-blue-600 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" />
+                                <span className="text-4xl font-black text-blue-600">{time}m</span>
                             </div>
                         </div>
-                        <div className="flex flex-wrap gap-3">
-                            {[1, 3, 10, 30, 60].map(m => (
-                                <button key={m} onClick={() => setCustomTime(m)} className={`px-6 py-3 rounded-2xl font-black transition-all ${customTime === m ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-50 dark:bg-slate-800'}`}>{m}m</button>
-                            ))}
-                        </div>
+                        {mode === 'bot' && (
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 block">Choisir un Bot</label>
+                                <div className="grid grid-cols-3 gap-3">
+                                    {MOCK_BOTS.slice(0, 3).map(b => (
+                                        <button key={b.id} onClick={() => setBot(b)} className={`p-4 rounded-2xl border text-center transition-all ${bot.id === b.id ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700'}`}>
+                                            <div className="text-2xl mb-1">{b.avatar}</div>
+                                            <div className="text-[9px] font-black uppercase tracking-tighter">{b.name}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
-                    <button onClick={() => startMatchmaking(customTime)} className="h-full py-16 bg-blue-600 text-white rounded-[40px] shadow-2xl shadow-blue-500/30 flex flex-col items-center justify-center transform active:scale-95 transition-all hover:bg-blue-700">
-                        <Swords size={64} className="mb-6" />
-                        <span className="text-3xl font-black">JOUER</span>
-                        <span className="text-white/50 text-xs font-bold mt-2 uppercase tracking-widest">Matchmaking Aléatoire</span>
+                    <button onClick={startGame} className="h-full py-16 lg:py-24 bg-blue-600 text-white rounded-[48px] shadow-3xl flex flex-col items-center justify-center transform active:scale-95 transition-all group hover:bg-blue-700">
+                        <Swords size={64} className="mb-6 group-hover:rotate-12 transition-transform" />
+                        <span className="text-4xl font-black tracking-tighter uppercase">Jouer</span>
                     </button>
                 </div>
             </div>
@@ -235,59 +303,63 @@ const ArenaDashboard: React.FC<{ userProfile: UserProfile | null, lang: Language
     );
 };
 
-// --- App Root ---
 const App: React.FC = () => {
   const [lang, setLang] = useState<Language>('fr');
   const [theme, setTheme] = useState<Theme>('light');
-  const [currentPage, setPage] = useState('play');
+  const [currentPage, setPage] = useState('home');
   const [user, setUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = useCallback(async (userId: string) => {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
-    if (data) setUserProfile(data);
+    try {
+        const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
+        if (data) setUserProfile(data);
+    } catch (e) { console.error("Profile Error", e); }
   }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      if (session?.user) {
-          fetchProfile(session.user.id);
-          setPage('play'); // Redirect on login
-      }
+      if (session?.user) { fetchProfile(session.user.id); setPage('play'); }
       setLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) {
-          fetchProfile(session.user.id);
-          setPage('play'); // Redirect on login
-      } else { 
-          setUserProfile(null); 
-          setPage('home'); 
-      }
+      if (session?.user) { fetchProfile(session.user.id); setPage('play'); }
+      else { setUserProfile(null); setPage('home'); }
     });
     return () => subscription.unsubscribe();
   }, [fetchProfile]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-950"><div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div></div>;
 
-  // Logique du flux Landing/Auth
-  if (!user) {
-      return (
-          <>
-            <LandingPage onLoginClick={() => setPage('auth')} lang={lang} setLang={setLang} theme={theme} toggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')} />
-            {currentPage === 'auth' && <AuthModal isOpen={true} onClose={() => setPage('home')} lang={lang} />}
-          </>
-      );
+  if (!user && (currentPage === 'home' || currentPage === 'auth')) {
+    return (
+      <>
+        <LandingPage onLoginClick={() => setPage('auth')} lang={lang} setLang={setLang} theme={theme} toggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')} />
+        {currentPage === 'auth' && <AuthModal isOpen={true} onClose={() => setPage('home')} lang={lang} />}
+      </>
+    );
   }
 
   return (
     <Layout currentLang={lang} setLang={setLang} theme={theme} toggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')} currentPage={currentPage} setPage={setPage} user={user} userProfile={userProfile}>
-       {currentPage === 'play' && <ArenaDashboard userProfile={userProfile} lang={lang} />}
-       {currentPage === 'profile' && userProfile && <ProfilePage profile={userProfile} onUpdate={() => fetchProfile(user.id)} />}
-       {/* (Le reste des pages comme TournamentsPage est omis ici pour la clarté mais reste accessible) */}
+       {currentPage === 'play' && <Arena userProfile={userProfile} />}
+       {currentPage === 'tournaments' && <TournamentList />}
+       {currentPage === 'admin' && <AdminConsole />}
+       {currentPage === 'profile' && userProfile && (
+           <div className="max-w-xl mx-auto bg-white dark:bg-slate-900 p-12 rounded-[56px] border border-slate-100 dark:border-slate-800 text-center animate-fade-in shadow-sm">
+               <div className="w-32 h-32 bg-blue-600 rounded-[32px] mx-auto mb-8 flex items-center justify-center text-5xl text-white font-black overflow-hidden border-4 border-white dark:border-slate-800 shadow-2xl">
+                   {userProfile.avatar_url ? <img src={userProfile.avatar_url} className="w-full h-full object-cover"/> : userProfile.username?.charAt(0).toUpperCase()}
+               </div>
+               <h2 className="text-4xl font-black mb-2 tracking-tighter">{userProfile.username}</h2>
+               <p className="text-blue-600 font-black text-xl mb-10">{userProfile.elo_rapid} ELO</p>
+               <button onClick={() => alert("Edition de profil")} className="w-full py-5 bg-slate-100 dark:bg-slate-800 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center space-x-2 hover:bg-blue-600 hover:text-white transition-all">
+                   <Edit3 size={18}/> <span>Modifier Profil</span>
+               </button>
+           </div>
+       )}
     </Layout>
   );
 };
