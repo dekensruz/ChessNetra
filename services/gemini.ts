@@ -7,7 +7,8 @@ export const getChessAdvice = async (fen: string, question: string) => {
     // est indéfini ou provoque une erreur lors du chargement initial du module.
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    const model = 'gemini-2.5-flash';
+    // Use gemini-3-pro-preview for complex Reasoning tasks like chess analysis.
+    const model = 'gemini-3-pro-preview';
     const prompt = `
       You are a Grandmaster Chess Coach. 
       The current board position in FEN is: ${fen}.
@@ -17,6 +18,7 @@ export const getChessAdvice = async (fen: string, question: string) => {
       Keep it under 100 words.
     `;
 
+    // Accessing .text property directly as per @google/genai SDK guidelines
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
